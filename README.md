@@ -43,18 +43,24 @@ With Capsule Hub, you click **one button** on your active chat, click the logo o
 
 ## 🔧 Installation Instructions for Chrome / Brave
 
-Since **Brave** runs on Chromium, it supports all standard Chrome Web Store and local developer-mode extensions:
+### Clone the Repository
+First, clone this repository to any directory on your system:
 
-1. **Download / Verify Files**:
-   Ensure all files are generated in `C:/Users/Admin/Projects/capsule-hub-extension/`.
-2. **Open Extensions Page**:
-   - In **Brave**, navigate to `brave://extensions` (or `chrome://extensions` in Chrome).
-3. **Enable Developer Mode**:
+```bash
+git clone https://github.com/yourusername/capsule-hub-extension.git
+```
+
+> 💡 You can place it anywhere — e.g., `~/projects/`, `C:\dev\`, or `D:\extensions\` — the path doesn't matter.
+
+### Load the Extension
+1. **Open Extensions Page**:
+   - In **Brave**, go to `brave://extensions` (or `chrome://extensions` in Chrome).
+2. **Enable Developer Mode**:
    - Toggle the **Developer Mode** switch in the top-right corner to **On**.
-4. **Load Unpacked Extension**:
+3. **Load Unpacked Extension**:
    - Click the **Load unpacked** button in the top-left corner.
-   - Select the directory containing the extension files: `C:\Users\Admin\Projects\capsule-hub-extension`.
-5. **Pin Capsule Hub**:
+   - Select the folder where you cloned the repository (e.g., `capsule-hub-extension`).
+4. **Pin Capsule Hub**:
    - Click the puzzle piece icon (Extensions menu) in the browser toolbar and pin **Capsule Hub - AI Context Bridge** for easy access!
 
 ---
