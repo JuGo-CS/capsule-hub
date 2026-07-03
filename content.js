@@ -7,17 +7,17 @@ const PROVIDERS = {
     name: "ChatGPT",
     domains: ["chatgpt.com"],
     selectors: {
-      userMessage: '[data-message-author-role="user"]',
-      assistantMessage: '[data-message-author-role="assistant"]',
-      input: '#prompt-textarea'
+      userMessage: '[data-message-author-role="user"], .user, .user-message, .chat-user-message',
+      assistantMessage: '[data-message-author-role="assistant"], .assistant, .assistant-message, .chat-assistant-message, .markdown',
+      input: '#prompt-textarea, div[contenteditable="true"]:not([data-placeholder=""])'
     }
   },
   claude: {
     name: "Claude",
     domains: ["claude.ai"],
     selectors: {
-      userMessage: '[data-testid="user-message"], div.font-user-message, div[class*="user-message"]',
-      assistantMessage: '.font-claude-message, div[class*="assistant-message"], div.font-claude-message',
+      userMessage: '[data-testid="user-message"], div.font-user-message, div[class*="user-message"], .user-message',
+      assistantMessage: '.font-claude-message, div[class*="assistant-message"], div.font-claude-message, .assistant-message',
       input: 'div[contenteditable="true"], textarea[placeholder*="Claude"], textarea[placeholder*="message"]'
     }
   },
@@ -25,8 +25,8 @@ const PROVIDERS = {
     name: "Gemini",
     domains: ["gemini.google.com"],
     selectors: {
-      userMessage: 'user-query, .query-text, .query-content',
-      assistantMessage: 'model-turn, .response-container-layout, .model-turn',
+      userMessage: 'user-query, .query-text, .query-content, .user-message',
+      assistantMessage: 'model-turn, .response-container-layout, .model-turn, .assistant-message',
       input: 'div[contenteditable="true"], textarea[placeholder*="Ask Gemini"]'
     }
   },
@@ -34,8 +34,8 @@ const PROVIDERS = {
     name: "DeepSeek",
     domains: ["deepseek.com", "chat.deepseek.com"],
     selectors: {
-      userMessage: '.ds-chat-turn--user, .user-message, [class*="user-message"]',
-      assistantMessage: '.ds-markdown, .assistant-message, [class*="assistant-message"]',
+      userMessage: '.ds-chat-turn--user, .user-message, [class*="user-message"], .user-turn',
+      assistantMessage: '.ds-markdown, .assistant-message, [class*="assistant-message"], .assistant-turn',
       input: '#chat-input, textarea'
     }
   }
@@ -52,13 +52,51 @@ function detectCurrentProvider() {
   return null;
 }
 
+// Wait for scroll completion to capture all messages
+function waitForScrollCompletion() {
+  return new Promise(resolve => {
+    let lastScrollHeight = document.body.scrollHeight;
+    let scrollCheckCount = 0;
+    const maxChecks = 20;
+    
+    const checkScroll = () => {
+      scrollCheckCount++;
+      
+      // Wait for 1 second after last scroll
+      if (document.body.scrollHeight === lastScrollHeight && scrollCheckCount > 5) {
+        resolve();
+        return;
+      }
+      
+      if (scrollCheckCount >= maxChecks) {
+        console.warn("Max scroll checks reached");
+        resolve();
+        return;
+      }
+      
+      lastScrollHeight = document.body.scrollHeight;
+      setTimeout(checkScroll, 1000);
+    };
+    
+    // Monitor scroll events
+    window.addEventListener('scroll', () => {
+      scrollCheckCount = 0; // Reset counter on scroll
+    });
+    
+    checkScroll();
+  });
+}
+
 // Extract conversation from page DOM
-function extractConversation() {
+async function extractConversation() {
   const providerKey = detectCurrentProvider();
   if (!providerKey) {
     return { success: false, error: "Unsupported AI website" };
   }
-
+  
+  // Wait for scroll completion to capture all messages
+  await waitForScrollCompletion();
+  
   const provider = PROVIDERS[providerKey];
   const userSelector = provider.selectors.userMessage;
   const assistantSelector = provider.selectors.assistantMessage;
@@ -297,8 +335,12 @@ function showToast(message, type = "success") {
 // Check for incoming messages (e.g. from popup request)
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "extractContext") {
-    const result = extractConversation();
-    sendResponse(result);
+    extractConversation().then(result => {
+      sendResponse(result);
+    }).catch(error => {
+      sendResponse({ success: false, error: error.message });
+    });
+    return true;
   }
   return true;
 });
