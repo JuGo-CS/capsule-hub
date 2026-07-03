@@ -47,7 +47,7 @@ With Capsule Hub, you click **one button** on your active chat, click the logo o
 First, clone this repository to any directory on your system:
 
 ```bash
-git clone https://github.com/yourusername/capsule-hub-extension.git
+git clone https://github.com/pruthvikrishnang/capsule-hub-extension.git
 ```
 
 > 💡 You can place it anywhere — e.g., `~/projects/`, `C:\dev\`, or `D:\extensions\` — the path doesn't matter.
