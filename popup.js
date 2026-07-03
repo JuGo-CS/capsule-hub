@@ -127,7 +127,7 @@ document.addEventListener("DOMContentLoaded", () => {
       item.className = "message-item";
       
       const roleText = msg.role === "user" ? "User" : "AI";
-      const snippet = msg.text.substring(0, 150) + (msg.text.length > 150 ? "..." : "");
+      const snippet = msg.text.substring(0, 200) + (msg.text.length > 200 ? "..." : "");
 
       item.innerHTML = `
         <div class="message-checkbox-wrapper">
