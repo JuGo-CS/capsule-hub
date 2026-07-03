@@ -3,6 +3,11 @@
   "name": "Capsule Hub - AI Context Bridge",
   "version": "1.0.0",
   "description": "Capture conversation context from one AI and continue in another instantly.",
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
   "permissions": [
     "activeTab",
     "storage",
@@ -17,21 +22,12 @@
   ],
   "action": {
     "default_popup": "popup.html",
+    "default_title": "Capsule Hub - AI Context Bridge",
     "default_icon": {
-      "16": "icon.svg",
-      "32": "icon.svg",
-      "48": "icon.svg",
-      "128": "icon.svg"
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
     }
-  },
-  "icons": {
-    "16": "icon.svg",
-    "32": "icon.svg",
-    "48": "icon.svg",
-    "128": "icon.svg"
-  },
-  "background": {
-    "service_worker": "background.js"
   },
   "content_scripts": [
     {
@@ -43,8 +39,12 @@
         "https://*.deepseek.com/*"
       ],
       "js": ["content.js"],
+      "css": ["content.css"],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
 }
 
