@@ -21,7 +21,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const manualText = document.getElementById("manual-text");
   const manualBridgeBtn = document.getElementById("manual-bridge-btn");
 
+  // Context mode controls
+  const modeFull = document.getElementById("mode-full");
+  const modeSelective = document.getElementById("mode-selective");
+  const modeSummary = document.getElementById("mode-summary");
+  const tokenCount = document.getElementById("token-count");
+  const tokenWarning = document.getElementById("token-warning");
+
   let extractedSession = null; // Stores currently loaded session { provider, providerName, messages }
+  let selectedMode = "full"; // Default mode
 
   // Initial connection check
   checkActiveTab();
@@ -33,6 +41,20 @@ document.addEventListener("DOMContentLoaded", () => {
   clearSessionBtn.addEventListener("click", clearCurrentSession);
   
   manualBridgeBtn.addEventListener("click", handleManualBridge);
+
+  // Mode selection listeners
+  modeFull.addEventListener("change", () => {
+    selectedMode = "full";
+    updateTokenCounter();
+  });
+  modeSelective.addEventListener("change", () => {
+    selectedMode = "selective";
+    updateTokenCounter();
+  });
+  modeSummary.addEventListener("change", () => {
+    selectedMode = "summary";
+    updateTokenCounter();
+  });
 
   // Set up Target Destination click handlers
   document.querySelectorAll(".target-btn").forEach(btn => {
@@ -118,7 +140,7 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // Configure counts
     const turnCount = session.messages.length;
-    messageCountBadge.innerText = `${turnCount} turn${turnCount === 1 ? '' : 's'}`;
+    messageCountBadge.innerText = `${turnCount} turn${turnCount === 1 ? '' : 's'} `;
 
     // Populate message list
     messagesList.innerHTML = "";
@@ -145,10 +167,15 @@ document.addEventListener("DOMContentLoaded", () => {
       item.querySelector(".message-body").addEventListener("click", () => {
         const checkbox = item.querySelector(".message-checkbox");
         checkbox.checked = !checkbox.checked;
+        updateTokenCounter();
       });
 
       messagesList.appendChild(item);
     });
+
+    // Reset checkbox states based on mode
+    updateModeSelection();
+    updateTokenCounter();
   }
 
   // Helper to escape HTML characters
@@ -166,6 +193,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".message-checkbox").forEach(box => {
       box.checked = checked;
     });
+    updateTokenCounter();
   }
 
   // Select only the last conversation turn (User prompt + AI Response, or just latest user prompt)
@@ -189,25 +217,86 @@ document.addEventListener("DOMContentLoaded", () => {
         checkboxes[i].checked = true;
       }
     }
+    updateTokenCounter();
+  }
+
+  // Update mode selection based on current mode
+  function updateModeSelection() {
+    // Reset all checkboxes if in full or summary mode
+    if (selectedMode === "full" || selectedMode === "summary") {
+      toggleAllCheckboxes(true);
+    } else if (selectedMode === "selective") {
+      // Keep existing selections for selective mode
+      // No action needed here as checkboxes are already set
+    }
+  }
+
+  // Estimate token count (simplified: ~4 chars per token)
+  function estimateTokenCount() {
+    if (!extractedSession || !extractedSession.messages) return 0;
+
+    let totalChars = 0;
+    const checkboxes = Array.from(document.querySelectorAll(".message-checkbox:checked"));
+    
+    if (selectedMode === "full" || selectedMode === "summary") {
+      // Use all messages
+      extractedSession.messages.forEach(msg => {
+        totalChars += msg.text.length;
+      });
+    } else if (selectedMode === "selective") {
+      // Use only selected messages
+      checkboxes.forEach(box => {
+        const idx = parseInt(box.dataset.idx);
+        totalChars += extractedSession.messages[idx].text.length;
+      });
+    }
+
+    // Estimate tokens (roughly 4 characters per token)
+    return Math.ceil(totalChars / 4);
+  }
+
+  // Update token counter and warning
+  function updateTokenCounter() {
+    const tokenCountEstimate = estimateTokenCount();
+    tokenCount.innerText = `${tokenCountEstimate} tokens`;
+    
+    // Show warning if over 3000 tokens
+    if (tokenCountEstimate > 3000) {
+      tokenWarning.classList.add("show");
+    } else {
+      tokenWarning.classList.remove("show");
+    }
   }
 
   // Generate formatted context string based on selected turns
   function generateFormattedContext() {
     if (!extractedSession || !extractedSession.messages) return "";
 
-    const selectedCheckboxes = Array.from(document.querySelectorAll(".message-checkbox:checked"));
-    if (selectedCheckboxes.length === 0) return "";
-
-    // Sort checkboxes by index
-    selectedCheckboxes.sort((a, b) => parseInt(a.dataset.idx) - parseInt(b.dataset.idx));
-
     let contextBody = "";
-    selectedCheckboxes.forEach(box => {
-      const idx = parseInt(box.dataset.idx);
-      const msg = extractedSession.messages[idx];
-      const sender = msg.role === "user" ? "User" : "AI Assistant";
-      contextBody += `\n[${sender}]:\n${msg.text}\n`;
-    });
+    
+    if (selectedMode === "full") {
+      // Full context: use all messages
+      extractedSession.messages.forEach(msg => {
+        const sender = msg.role === "user" ? "User" : "AI Assistant";
+        contextBody += `\n[${sender}]:\n${msg.text}\n`;
+      });
+    } else if (selectedMode === "selective") {
+      // Selective mode: use only selected messages
+      const selectedCheckboxes = Array.from(document.querySelectorAll(".message-checkbox:checked"));
+      if (selectedCheckboxes.length === 0) return "";
+      
+      selectedCheckboxes.sort((a, b) => parseInt(a.dataset.idx) - parseInt(b.dataset.idx));
+      
+      selectedCheckboxes.forEach(box => {
+        const idx = parseInt(box.dataset.idx);
+        const msg = extractedSession.messages[idx];
+        const sender = msg.role === "user" ? "User" : "AI Assistant";
+        contextBody += `\n[${sender}]:\n${msg.text}\n`;
+      });
+    } else if (selectedMode === "summary") {
+      // Summary mode: generate a concise summary
+      contextBody = generateSummary();
+    }
 
     const includeHeader = addSummaryPromptCheckbox.checked;
     if (includeHeader) {
@@ -216,6 +305,44 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     return contextBody.trim();
+  }
+
+  // Generate a summary of the conversation
+  function generateSummary() {
+    if (!extractedSession || !extractedSession.messages) return "";
+    
+    // Extract key elements for summary
+    const messages = extractedSession.messages;
+    const summaryParts = [];
+    
+    // Always include the first message
+    if (messages.length > 0) {
+      const firstMsg = messages[0];
+      summaryParts.push(`Initial query: ${firstMsg.text.substring(0, 100)}${firstMsg.text.length > 100 ? "..." : ""}`);
+    }
+    
+    // Include the last message (most recent)
+    if (messages.length > 1) {
+      const lastMsg = messages[messages.length - 1];
+      summaryParts.push(`Final response: ${lastMsg.text.substring(0, 100)}${lastMsg.text.length > 100 ? "..." : ""}`);
+    }
+    
+    // Include key exchanges (user -> assistant pairs)
+    let userMsg = null;
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i].role === "user") {
+        userMsg = messages[i];
+      } else if (messages[i].role === "assistant" && userMsg) {
+        // Found a user-assistant pair
+        const userSnippet = userMsg.text.substring(0, 80);
+        const assistantSnippet = messages[i].text.substring(0, 120);
+        summaryParts.push(`Q: ${userSnippet}${userMsg.text.length > 80 ? "..." : ""}\nA: ${assistantSnippet}${messages[i].text.length > 120 ? "..." : ""}`);
+        userMsg = null;
+      }
+    }
+    
+    // Create a concise summary
+    return "Summary of conversation:\n" + summaryParts.join("\n\n");
   }
 
   // Copy selected context to clipboard

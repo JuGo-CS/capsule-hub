@@ -79,6 +79,28 @@
           <!-- Populated programmatically -->
         </div>
 
+        <!-- Context Mode Selector -->
+        <div class="mode-selector">
+          <div class="mode-group">
+            <input type="radio" id="mode-full" name="context-mode" value="full" checked>
+            <label for="mode-full" class="mode-label">Full Context</label>
+          </div>
+          <div class="mode-group">
+            <input type="radio" id="mode-selective" name="context-mode" value="selective">
+            <label for="mode-selective" class="mode-label">Selective</label>
+          </div>
+          <div class="mode-group">
+            <input type="radio" id="mode-summary" name="context-mode" value="summary">
+            <label for="mode-summary" class="mode-label">Summary</label>
+          </div>
+        </div>
+
+        <!-- Token Counter -->
+        <div class="token-counter">
+          <span id="token-count">0 tokens</span>
+          <span class="token-warning" id="token-warning">⚠️ High token usage</span>
+        </div>
+
         <!-- Format Options -->
         <div class="options-container">
           <label class="switch-container">

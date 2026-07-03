@@ -469,7 +469,82 @@ main {
   max-width: 250px;
 }
 
-/* Switch Styling */
+/* Context Mode Selector */
+.mode-selector {
+  display: flex;
+  justify-content: space-between;
+  margin: 12px 0 8px 0;
+  padding: 8px 10px;
+  background: var(--bg-card);
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+}
+
+.mode-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mode-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.mode-label:hover {
+  color: var(--text-primary);
+}
+
+.mode-label input[type="radio"] {
+  display: none;
+}
+
+.mode-label::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  margin-right: 6px;
+  transition: all 0.2s ease;
+}
+
+.mode-label:hover::before {
+  border-color: var(--color-cyan);
+}
+
+.mode-label input[type="radio"]:checked + .mode-label::before {
+  background-color: var(--color-cyan);
+  border-color: var(--color-cyan);
+}
+
+/* Token Counter */
+.token-counter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 0;
+  font-size: 10px;
+}
+
+.token-count {
+  color: var(--text-secondary);
+}
+
+.token-warning {
+  color: #f87171;
+  display: none;
+  font-weight: 600;
+}
+
+.token-warning.show {
+  display: inline;
+}
+
+/* Format Options */
 .options-container {
   display: flex;
   background: rgba(255, 255, 255, 0.02);
