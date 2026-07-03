@@ -94,8 +94,12 @@ async function extractConversation() {
     return { success: false, error: "Unsupported AI website" };
   }
   
-  // Wait for scroll completion to capture all messages
-  await waitForScrollCompletion();
+  try {
+    // Wait for scroll completion to capture all messages
+    await waitForScrollCompletion();
+  } catch (error) {
+    console.warn("Scroll completion wait failed:", error);
+  }
   
   const provider = PROVIDERS[providerKey];
   const userSelector = provider.selectors.userMessage;
