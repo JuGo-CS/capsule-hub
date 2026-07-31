@@ -210,7 +210,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <span class="role-badge role-${msg.role}">${roleText}</span>
             ${hasCode ? '<span class="code-badge">&lt;/&gt; code</span>' : ''}
           </div>
-          <div class="message-snippet">${escapeHtml(snippet)}</div>
+          <div class="message-snippet">${escapeHTML(snippet)}</div>
         </div>
       `;
 
@@ -434,8 +434,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         item.innerHTML = `
           <div class="library-item-header">
-            <span class="library-item-title">${escapeHtml(capsule.title)}</span>
-            <span class="library-item-provider">${escapeHtml(capsule.provider || "Manual")}</span>
+            <span class="library-item-title">${escapeHTML(capsule.title)}</span>
+            <span class="library-item-provider">${escapeHTML(capsule.provider || "Manual")}</span>
           </div>
           <div class="library-item-meta">
             <span>${capsule.messageCount} msgs</span>
@@ -506,7 +506,12 @@ document.addEventListener("DOMContentLoaded", () => {
       displaySession(extractedSession);
       showStatus("Loaded", true);
       
-      document.querySelector('.tab[data-tab="capture"]').click();
+      // Switch to capture view programmatically
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelector('.tab[data-tab="capture"]')?.classList.add('active');
+      captureView.classList.remove('hidden');
+      libraryView.classList.add('hidden');
+      
       showFooterMessage("💊 Capsule loaded!", "success");
     });
   }
