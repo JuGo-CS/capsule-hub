@@ -1,42 +1,43 @@
 // Content script for Capsule Hub - running on AI chat sites
-console.log("Capsule Hub content script loaded on", window.location.hostname);
+// 🔒 PRIVACY: All processing happens locally. No data is sent to any external server.
+console.log("[Capsule Hub] Content script loaded on", window.location.hostname);
 
 // Provider configuration mapping
 const PROVIDERS = {
   chatgpt: {
     name: "ChatGPT",
-    domains: ["chatgpt.com"],
+    domains: ["chatgpt.com", "chat.openai.com"],
     selectors: {
-      userMessage: '[data-message-author-role="user"], .user, .user-message, .chat-user-message',
-      assistantMessage: '[data-message-author-role="assistant"], .assistant, .assistant-message, .chat-assistant-message, .markdown',
-      input: '#prompt-textarea, div[contenteditable="true"]:not([data-placeholder=""])'
+      userMessage: '[data-message-author-role="user"], .user-message, [class*="user-message"]',
+      assistantMessage: '[data-message-author-role="assistant"], .assistant-message, [class*="assistant-message"]',
+      input: '#prompt-textarea, div[contenteditable="true"][data-id], textarea[rows]'
     }
   },
   claude: {
     name: "Claude",
     domains: ["claude.ai"],
     selectors: {
-      userMessage: '[data-testid="user-message"], div.font-user-message, div[class*="user-message"], .user-message',
-      assistantMessage: '.font-claude-message, div[class*="assistant-message"], div.font-claude-message, .assistant-message',
-      input: 'div[contenteditable="true"], textarea[placeholder*="Claude"], textarea[placeholder*="message"]'
+      userMessage: '[data-testid="user-message"], div.font-user-message, [class*="user-message"]',
+      assistantMessage: '.font-claude-message, [class*="claude-message"], [class*="assistant-message"]',
+      input: 'div[contenteditable="true"][role="textbox"], div.ProseMirror[contenteditable="true"]'
     }
   },
   gemini: {
     name: "Gemini",
     domains: ["gemini.google.com"],
     selectors: {
-      userMessage: 'user-query, .query-text, .query-content, .user-message',
-      assistantMessage: 'model-turn, .response-container-layout, .model-turn, .assistant-message',
-      input: 'div[contenteditable="true"], textarea[placeholder*="Ask Gemini"]'
+      userMessage: 'user-query, .query-text, [class*="user-query"]',
+      assistantMessage: 'model-turn, .model-response, [class*="model-turn"]',
+      input: 'div[contenteditable="true"], rich-textarea div[contenteditable="true"]'
     }
   },
   deepseek: {
     name: "DeepSeek",
     domains: ["deepseek.com", "chat.deepseek.com"],
     selectors: {
-      userMessage: '.ds-chat-turn--user, .user-message, [class*="user-message"], .user-turn',
-      assistantMessage: '.ds-markdown, .assistant-message, [class*="assistant-message"], .assistant-turn',
-      input: '#chat-input, textarea'
+      userMessage: '[class*="user-message"], .ds-chat-turn--user',
+      assistantMessage: '.ds-markdown, [class*="assistant-message"]',
+      input: '#chat-input, textarea[placeholder*="message"], div[contenteditable="true"]'
     }
   }
 };
@@ -52,150 +53,142 @@ function detectCurrentProvider() {
   return null;
 }
 
-// Wait for scroll completion to capture all messages
-function waitForScrollCompletion() {
-  return new Promise(resolve => {
-    let lastScrollHeight = document.body.scrollHeight;
-    let scrollCheckCount = 0;
-    const maxChecks = 20;
-    
-    const checkScroll = () => {
-      scrollCheckCount++;
-      
-      // Wait for 1 second after last scroll
-      if (document.body.scrollHeight === lastScrollHeight && scrollCheckCount > 5) {
-        resolve();
-        return;
+// Scroll to the top of the chat container and wait for all messages to load
+async function scrollToTopAndLoadAll() {
+  const scrollContainers = [
+    document.querySelector('[class*="overflow-auto"][class*="scroll"]'),
+    document.querySelector('main'),
+    document.querySelector('[role="main"]'),
+    document.scrollingElement || document.documentElement
+  ].filter(Boolean);
+
+  for (const container of scrollContainers) {
+    if (container.scrollHeight > container.clientHeight) {
+      let previousHeight = 0;
+      let stableCount = 0;
+      const maxAttempts = 30;
+
+      for (let i = 0; i < maxAttempts; i++) {
+        container.scrollTop = 0;
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        const currentHeight = container.scrollHeight;
+        if (currentHeight === previousHeight) {
+          stableCount++;
+          if (stableCount >= 3) break;
+        } else {
+          stableCount = 0;
+        }
+        previousHeight = currentHeight;
       }
-      
-      if (scrollCheckCount >= maxChecks) {
-        console.warn("Max scroll checks reached");
-        resolve();
-        return;
-      }
-      
-      lastScrollHeight = document.body.scrollHeight;
-      setTimeout(checkScroll, 1000);
-    };
-    
-    // Monitor scroll events
-    window.addEventListener('scroll', () => {
-      scrollCheckCount = 0; // Reset counter on scroll
-    });
-    
-    checkScroll();
-  });
+      break;
+    }
+  }
+
+  // Small delay for DOM to settle
+  await new Promise(resolve => setTimeout(resolve, 300));
 }
 
 // Extract conversation from page DOM
 async function extractConversation() {
   const providerKey = detectCurrentProvider();
   if (!providerKey) {
-    return { success: false, error: "Unsupported AI website" };
+    return { success: false, error: "Unsupported AI website. Navigate to ChatGPT, Claude, Gemini, or DeepSeek to extract context." };
   }
-  
+
   try {
-    // Wait for scroll completion to capture all messages
-    await waitForScrollCompletion();
+    await scrollToTopAndLoadAll();
   } catch (error) {
-    console.warn("Scroll completion wait failed:", error);
+    console.warn("[Capsule Hub] Scroll to top encountered an issue:", error);
   }
-  
+
   const provider = PROVIDERS[providerKey];
   const userSelector = provider.selectors.userMessage;
   const assistantSelector = provider.selectors.assistantMessage;
 
-  // Query both sets of selectors to read them in document order (chronological order)
   const querySelectorAllString = `${userSelector}, ${assistantSelector}`;
   const elements = Array.from(document.querySelectorAll(querySelectorAllString));
-  
+
   if (elements.length === 0) {
-    // Try a general approach: search for divs with user/assistant keywords or bubbles
-    return { 
-      success: false, 
-      error: "No messages found. Try sending a message first or refresh the page." 
+    return {
+      success: false,
+      error: "No messages found. Try sending a message first or scroll up to load the full conversation."
     };
   }
 
   const messages = [];
-  
+
   elements.forEach((element) => {
-    // Determine the role by checking which selector matched
     let role = 'unknown';
     if (element.matches(userSelector)) {
       role = 'user';
     } else if (element.matches(assistantSelector)) {
       role = 'assistant';
     } else {
-      // Fallback check
-      const text = element.className.toLowerCase();
-      if (text.includes('user')) role = 'user';
-      else if (text.includes('assistant') || text.includes('agent') || text.includes('claude') || text.includes('model')) {
+      const className = element.className.toLowerCase();
+      if (className.includes('user')) role = 'user';
+      else if (className.includes('assistant') || className.includes('claude') || className.includes('model')) {
         role = 'assistant';
       }
     }
 
-    // Extract text content, stripping unwanted edit buttons or action buttons
-    // Typically, we want the core text block.
-    // For Claude / ChatGPT, sometimes they have extra elements. We clean up common ones.
-    let text = "";
-    
-    // Copy element and remove buttons/actions to get clean text representation
+    // Clone and clean element to extract pure text
     const clone = element.cloneNode(true);
-    const elementsToRemove = clone.querySelectorAll('button, svg, .sr-only, [aria-hidden="true"], .custom-actions, div[class*="Action"], div[class*="button"]');
+    const elementsToRemove = clone.querySelectorAll(
+      'button, svg, [aria-hidden="true"], [role="button"], ' +
+      'img[class*="avatar"], img[class*="icon"], ' +
+      'div[class*="action"], div[class*="Action"], ' +
+      'div[class*="toolbar"], div[class*="feedback"], ' +
+      'span[class*="copy"], span[class*="Copy"]'
+    );
     elementsToRemove.forEach(el => el.remove());
-    
-    text = clone.innerText || clone.textContent || "";
-    text = text.trim();
+
+    let text = (clone.innerText || clone.textContent || "").trim();
+
+    // Remove common boilerplate text patterns
+    text = text.replace(/^(Copy|Copy code|Regenerate|Good response|Bad response)\s*/gim, '');
 
     if (text && role !== 'unknown') {
       messages.push({ role, text });
     }
   });
 
-  // Filter consecutive duplicates if DOM structure returned double matches
+  // Filter consecutive duplicates (DOM structures can sometimes cause double matches)
   const filteredMessages = [];
   for (let i = 0; i < messages.length; i++) {
-    if (i === 0 || messages[i].text !== messages[i-1].text || messages[i].role !== messages[i-1].role) {
+    if (i === 0 || messages[i].text !== messages[i - 1].text || messages[i].role !== messages[i - 1].role) {
       filteredMessages.push(messages[i]);
     }
+  }
+
+  if (filteredMessages.length === 0) {
+    return {
+      success: false,
+      error: "Could not extract meaningful content from this page."
+    };
   }
 
   return {
     success: true,
     provider: providerKey,
     providerName: provider.name,
-    messages: filteredMessages
+    messages: filteredMessages,
+    timestamp: Date.now(),
+    url: window.location.href
   };
 }
 
-// Inject text into the target input element
+// Inject text into the target input element with React/Vue compatibility
 function injectText(element, text) {
   element.focus();
-  
-  // Method 1: Using execCommand (supports rich text and most frameworks cleanly)
-  try {
-    // Select any existing text in focus
-    document.execCommand('selectall', false, null);
-    document.execCommand('insertText', false, text);
-    console.log("Injected context via execCommand");
-    return true;
-  } catch (e) {
-    console.warn("execCommand failed, attempting direct DOM event simulation...", e);
-  }
 
-  // Method 2: Direct value assignment and React/Vue event dispatch
+  // Method 1: Modern Input Events API (preferred for React/Vue frameworks)
   try {
-    const isValueProperty = element.tagName === 'TEXTAREA' || element.tagName === 'INPUT';
-    
-    if (isValueProperty) {
-      // Bypass React's overridden value setter if applicable
+    if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
+      // Use native setter to bypass framework overrides
       const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLTextAreaElement.prototype, 
-        "value"
-      )?.set || Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype, 
-        "value"
+        element.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
+        'value'
       )?.set;
 
       if (nativeInputValueSetter) {
@@ -203,18 +196,51 @@ function injectText(element, text) {
       } else {
         element.value = text;
       }
-      
+
       element.dispatchEvent(new Event('input', { bubbles: true }));
       element.dispatchEvent(new Event('change', { bubbles: true }));
-    } else {
-      // Contenteditable divs
+      console.log("[Capsule Hub] Injected via native value setter");
+      return true;
+    } else if (element.isContentEditable) {
+      // For contenteditable divs (used by ChatGPT, Claude, etc.)
+      // Use InputEvent for better framework compatibility
+      element.innerText = '';
+      
+      const inputEvent = new InputEvent('beforeinput', {
+        inputType: 'insertText',
+        data: text,
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      });
+      element.dispatchEvent(inputEvent);
+
       element.innerText = text;
-      element.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const afterInputEvent = new InputEvent('input', {
+        inputType: 'insertText',
+        data: text,
+        bubbles: true,
+        cancelable: false,
+        composed: true
+      });
+      element.dispatchEvent(afterInputEvent);
+
+      console.log("[Capsule Hub] Injected via InputEvent API");
+      return true;
     }
-    console.log("Injected context via event simulation");
+  } catch (e) {
+    console.warn("[Capsule Hub] Modern injection failed, trying fallback:", e);
+  }
+
+  // Method 2: Fallback using execCommand (deprecated but still works)
+  try {
+    document.execCommand('selectAll', false, null);
+    document.execCommand('insertText', false, text);
+    console.log("[Capsule Hub] Injected via execCommand fallback");
     return true;
   } catch (e) {
-    console.error("Failed to inject text:", e);
+    console.error("[Capsule Hub] All injection methods failed:", e);
     return false;
   }
 }
@@ -226,57 +252,80 @@ function startInjectionPolling(text) {
 
   const provider = PROVIDERS[providerKey];
   let attempts = 0;
-  const maxAttempts = 30; // 15 seconds max
+  const maxAttempts = 40; // 20 seconds max
 
-  console.log(`Starting injection polling for ${provider.name}...`);
+  console.log(`[Capsule Hub] Starting injection polling for ${provider.name}...`);
+
+  // Show injection progress indicator
+  showInjectIndicator("Preparing to inject context...");
 
   const pollInterval = setInterval(() => {
     attempts++;
-    
-    // Find the input field
+
     const inputElement = document.querySelector(provider.selectors.input);
-    
+
     if (inputElement) {
       clearInterval(pollInterval);
-      console.log("Found input element. Injecting context...");
-      
+      console.log("[Capsule Hub] Found input element. Injecting context...");
+
+      showInjectIndicator("Injecting context...");
+
       setTimeout(() => {
         const success = injectText(inputElement, text);
         if (success) {
-          showToast(`Context bridge active! Capsule Hub injected your session. 🚀`);
+          showToast(`✅ Context injected! Review and press Enter to continue.`, "success");
+          showInjectIndicator(null); // Hide indicator
           // Clear context from storage so it doesn't inject again on refresh
           chrome.storage.local.remove('pendingContext');
         } else {
-          showToast(`Context bridge ready. Please paste (Ctrl+V) manually! 📋`, "warning");
+          showToast(`⚠️ Auto-inject failed. Context copied to clipboard — please paste manually.`, "warning");
+          showInjectIndicator(null);
+          navigator.clipboard.writeText(text).catch(err => console.error("[Capsule Hub] Clipboard copy failed:", err));
         }
-      }, 500); // Small buffer to ensure editor listeners are registered
+      }, 800); // Buffer to ensure editor listeners are registered
     }
 
     if (attempts >= maxAttempts) {
       clearInterval(pollInterval);
-      console.warn("Input element not found after 15 seconds. Creating fallback paste option.");
-      showToast("Capsule Hub: Input area not found. Context copied to clipboard instead!", "warning");
-      
-      // Copy to clipboard as a last resort fallback
-      navigator.clipboard.writeText(text).catch(err => console.error("Clipboard copy failed: ", err));
+      console.warn("[Capsule Hub] Input element not found after 20 seconds.");
+      showToast("⚠️ Input area not found. Context copied to clipboard!", "warning");
+      showInjectIndicator(null);
+      navigator.clipboard.writeText(text).catch(err => console.error("[Capsule Hub] Clipboard copy failed:", err));
     }
   }, 500);
 }
 
-// Inject styling and display toast message in the UI
+// Show/hide injection progress indicator
+function showInjectIndicator(message) {
+  let indicator = document.getElementById('capsule-hub-inject-indicator');
+
+  if (!message) {
+    if (indicator) {
+      indicator.classList.remove('visible');
+      setTimeout(() => indicator?.remove(), 300);
+    }
+    return;
+  }
+
+  if (!indicator) {
+    indicator = document.createElement('div');
+    indicator.id = 'capsule-hub-inject-indicator';
+    indicator.innerHTML = '<div class="spinner"></div><span></span>';
+    document.body.appendChild(indicator);
+  }
+
+  indicator.querySelector('span').textContent = message;
+  requestAnimationFrame(() => indicator.classList.add('visible'));
+}
+
+// Display toast message in the UI
 function showToast(message, type = "success") {
-  // Remove existing toast if any
   const existing = document.getElementById('capsule-hub-toast');
   if (existing) existing.remove();
 
-  // Create toast container
   const toast = document.createElement('div');
   toast.id = 'capsule-hub-toast';
-  
-  // Custom styling
-  const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  
-  // Colors based on type
+
   const themeColors = {
     success: {
       bg: "linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%)",
@@ -289,7 +338,7 @@ function showToast(message, type = "success") {
       shadow: "rgba(245, 158, 11, 0.4)"
     }
   };
-  
+
   const currentTheme = themeColors[type] || themeColors.success;
 
   Object.assign(toast.style, {
@@ -312,31 +361,33 @@ function showToast(message, type = "success") {
     opacity: '0',
     transform: 'translateY(-20px) scale(0.95)',
     transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-    pointerEvents: 'none'
+    pointerEvents: 'none',
+    maxWidth: '360px'
   });
 
-  toast.innerHTML = `
-    <span style="font-size: 16px;">🔄</span>
-    <span>${message}</span>
-  `;
-
+  toast.innerHTML = `<span>${escapeHTML(message)}</span>`;
   document.body.appendChild(toast);
 
-  // Trigger animations
   requestAnimationFrame(() => {
     toast.style.opacity = '1';
     toast.style.transform = 'translateY(0) scale(1)';
   });
 
-  // Hide and remove after 4.5 seconds
   setTimeout(() => {
     toast.style.opacity = '0';
     toast.style.transform = 'translateY(-20px) scale(0.95)';
     setTimeout(() => toast.remove(), 400);
-  }, 4500);
+  }, 5000);
 }
 
-// Check for incoming messages (e.g. from popup request)
+// Simple HTML escaper for safe text injection
+function escapeHTML(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "extractContext") {
     extractConversation().then(result => {
@@ -344,9 +395,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }).catch(error => {
       sendResponse({ success: false, error: error.message });
     });
-    return true;
+    return true; // Keep the message channel open for async response
   }
-  return true;
+
+  if (request.action === "ping") {
+    sendResponse({ alive: true, provider: detectCurrentProvider() });
+    return false;
+  }
+
+  return false;
 });
 
 // Check if we have pending context injection at load time
@@ -354,19 +411,20 @@ chrome.storage.local.get('pendingContext', (data) => {
   if (data && data.pendingContext) {
     const context = data.pendingContext;
     const currentProvider = detectCurrentProvider();
-    
-    // Check if the domain matches the target and has not expired (e.g., within last 2 minutes)
+
+    // Check if the domain matches the target and has not expired (within last 2 minutes)
     const timeDiff = Date.now() - context.timestamp;
     if (context.targetAI === currentProvider && timeDiff < 120000) {
+      // Wait for DOM to be ready
+      const init = () => startInjectionPolling(context.text);
       if (document.readyState === 'complete' || document.readyState === 'interactive') {
-        startInjectionPolling(context.text);
+        setTimeout(init, 500); // Small delay to ensure page scripts are loaded
       } else {
-        window.addEventListener('DOMContentLoaded', () => {
-          startInjectionPolling(context.text);
-        });
+        window.addEventListener('DOMContentLoaded', () => setTimeout(init, 500));
       }
+    } else if (timeDiff >= 120000) {
+      // Clean up expired pending context
+      chrome.storage.local.remove('pendingContext');
     }
   }
 });
-
-
