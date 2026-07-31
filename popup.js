@@ -1,23 +1,24 @@
 // Popup logic for Capsule Hub
+// 🔒 PRIVACY: All data is stored locally in your browser. Nothing is sent to external servers.
 document.addEventListener("DOMContentLoaded", () => {
   // Elements
   const statusPill = document.getElementById("connection-status");
   const statusText = document.getElementById("status-text");
-  
+
   const unsupportedView = document.getElementById("unsupported-view");
   const capturedView = document.getElementById("captured-view");
-  
+
   const sourceBadge = document.getElementById("source-badge");
   const messageCountBadge = document.getElementById("message-count-badge");
   const messagesList = document.getElementById("messages-list");
-  
+
   const selectAllBtn = document.getElementById("select-all-btn");
   const selectLastBtn = document.getElementById("select-last-btn");
   const addSummaryPromptCheckbox = document.getElementById("add-summary-prompt");
   const copyClipboardBtn = document.getElementById("copy-clipboard-btn");
   const clearSessionBtn = document.getElementById("clear-session-btn");
   const footerMessage = document.getElementById("footer-message");
-  
+
   const manualText = document.getElementById("manual-text");
   const manualBridgeBtn = document.getElementById("manual-bridge-btn");
 
@@ -25,26 +26,39 @@ document.addEventListener("DOMContentLoaded", () => {
   const modeFull = document.getElementById("mode-full");
   const modeSelective = document.getElementById("mode-selective");
   const modeSummary = document.getElementById("mode-summary");
-  const tokenCount = document.getElementById("token-count");
+  const tokenCountEl = document.getElementById("token-count");
   const tokenWarning = document.getElementById("token-warning");
 
-  let extractedSession = null; // Stores currently loaded session { provider, providerName, messages }
-  let selectedMode = "full"; // Default mode
+  let extractedSession = null;
+  let selectedMode = "full";
 
   // Initial connection check
   checkActiveTab();
 
   // Button Event Listeners
-  selectAllBtn.addEventListener("click", () => toggleAllCheckboxes(true));
-  selectLastBtn.addEventListener("click", selectOnlyLastTurn);
+  selectAllBtn.addEventListener("click", () => {
+    toggleAllCheckboxes(true);
+    updateTokenCounter();
+  });
+  selectLastBtn.addEventListener("click", () => {
+    selectOnlyLastTurn();
+    updateTokenCounter();
+  });
   copyClipboardBtn.addEventListener("click", copyContextToClipboard);
   clearSessionBtn.addEventListener("click", clearCurrentSession);
-  
   manualBridgeBtn.addEventListener("click", handleManualBridge);
+
+  // Add checkbox change listeners for token counter updates
+  messagesList.addEventListener("change", (e) => {
+    if (e.target.classList.contains("message-checkbox")) {
+      updateTokenCounter();
+    }
+  });
 
   // Mode selection listeners
   modeFull.addEventListener("change", () => {
     selectedMode = "full";
+    toggleAllCheckboxes(true);
     updateTokenCounter();
   });
   modeSelective.addEventListener("change", () => {
@@ -53,10 +67,11 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   modeSummary.addEventListener("change", () => {
     selectedMode = "summary";
+    toggleAllCheckboxes(true);
     updateTokenCounter();
   });
 
-  // Set up Target Destination click handlers
+  // Target Destination click handlers
   document.querySelectorAll(".target-btn").forEach(btn => {
     btn.addEventListener("click", (e) => {
       const targetBtn = e.currentTarget;
@@ -70,49 +85,67 @@ document.addEventListener("DOMContentLoaded", () => {
   function checkActiveTab() {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (!tabs || tabs.length === 0) {
-        showStatus("No active tab detected", "idle");
+        showStatus("No active tab", "idle");
         showUnsupportedView();
         return;
       }
 
       const activeTab = tabs[0];
-      
+
+      // Check if URL is supported
+      const url = activeTab.url || "";
+      if (!isSupportedUrl(url)) {
+        loadSavedSessionOrShowWelcome();
+        return;
+      }
+
       // Try to communicate with content script on active tab
       chrome.tabs.sendMessage(activeTab.id, { action: "extractContext" }, (response) => {
-        // Handle runtime errors (e.g. content script not loaded on page)
         if (chrome.runtime.lastError || !response) {
-          console.log("Content script not active on current tab. Checking storage...");
-          // Content script not loaded, check if we have previously saved context in storage
+          console.log("[Capsule Hub] Content script not ready. Checking storage...");
+          // Try injecting content script if not loaded
+          chrome.scripting?.executeScript({
+            target: { tabId: activeTab.id },
+            files: ['content.js']
+          }).catch(() => {});
           loadSavedSessionOrShowWelcome();
           return;
         }
 
         if (response.success) {
-          console.log("Context successfully extracted:", response);
+          console.log("[Capsule Hub] Context extracted successfully");
           extractedSession = response;
-          // Save this session to storage for persistence
           chrome.storage.local.set({ savedSession: response });
           displaySession(response);
-          showStatus("Context extracted!", "active");
+          showStatus("Context captured!", "active");
         } else {
-          console.log("Failed to extract context from active tab:", response.error);
+          console.log("[Capsule Hub] Extraction failed:", response.error);
           loadSavedSessionOrShowWelcome();
         }
       });
     });
   }
 
+  // Check if URL matches any supported provider
+  function isSupportedUrl(url) {
+    const supported = [
+      "chatgpt.com", "chat.openai.com", "claude.ai",
+      "gemini.google.com", "chat.deepseek.com", "deepseek.com"
+    ];
+    return supported.some(domain => url.includes(domain));
+  }
+
   // Load a previously saved session or show unsupported launchpad
   function loadSavedSessionOrShowWelcome() {
     chrome.storage.local.get("savedSession", (data) => {
       if (data && data.savedSession) {
-        console.log("Loaded saved session from storage");
+        console.log("[Capsule Hub] Loaded saved session from storage");
         extractedSession = data.savedSession;
         displaySession(extractedSession);
-        showStatus("Saved context loaded", "active");
+        showStatus("Saved context", "active");
       } else {
         showUnsupportedView();
-        showStatus("Launchpad", "idle");
+        showStatus("Ready", "idle");
       }
     });
   }
@@ -134,58 +167,66 @@ document.addEventListener("DOMContentLoaded", () => {
     unsupportedView.classList.add("hidden");
     capturedView.classList.remove("hidden");
 
-    // Configure source badge classes
-    sourceBadge.innerText = session.providerName;
-    sourceBadge.className = `source-badge source-${session.provider}`;
-    
+    // Configure source badge
+    sourceBadge.innerText = session.providerName || "Unknown";
+    sourceBadge.className = `source-badge source-${session.provider || 'manual'}`;
+
     // Configure counts
     const turnCount = session.messages.length;
-    messageCountBadge.innerText = `${turnCount} turn${turnCount === 1 ? '' : 's'} `;
+    messageCountBadge.innerText = `${turnCount} message${turnCount === 1 ? '' : 's'}`;
 
     // Populate message list
     messagesList.innerHTML = "";
     session.messages.forEach((msg, idx) => {
       const item = document.createElement("div");
       item.className = "message-item";
-      
-      const roleText = msg.role === "user" ? "User" : "AI";
-      const snippet = msg.text.substring(0, 200) + (msg.text.length > 200 ? "..." : "");
 
-      item.innerHTML = `
-        <div class="message-checkbox-wrapper">
-          <input type="checkbox" class="message-checkbox" data-idx="${idx}" checked>
-        </div>
-        <div class="message-body" data-idx="${idx}">
-          <div class="message-meta">
-            <span class="role-badge role-${msg.role}">${roleText}</span>
-          </div>
-          <p class="message-snippet">${escapeHtml(snippet)}</p>
-        </div>
-      `;
+      const roleText = msg.role === "user" ? "You" : "AI";
+      const snippet = msg.text.substring(0, 180) + (msg.text.length > 180 ? "..." : "");
 
-      // Allow clicking the body to toggle selection
-      item.querySelector(".message-body").addEventListener("click", () => {
-        const checkbox = item.querySelector(".message-checkbox");
+      const checkboxWrapper = document.createElement("div");
+      checkboxWrapper.className = "message-checkbox-wrapper";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "message-checkbox";
+      checkbox.dataset.idx = idx;
+      checkbox.checked = true;
+      checkboxWrapper.appendChild(checkbox);
+
+      const body = document.createElement("div");
+      body.className = "message-body";
+      body.dataset.idx = idx;
+
+      const meta = document.createElement("div");
+      meta.className = "message-meta";
+      const roleBadge = document.createElement("span");
+      roleBadge.className = `role-badge role-${msg.role}`;
+      roleBadge.textContent = roleText;
+      meta.appendChild(roleBadge);
+
+      const snippetEl = document.createElement("p");
+      snippetEl.className = "message-snippet";
+      snippetEl.textContent = snippet;
+
+      body.appendChild(meta);
+      body.appendChild(snippetEl);
+
+      // Click body to toggle checkbox
+      body.addEventListener("click", (e) => {
+        e.preventDefault();
         checkbox.checked = !checkbox.checked;
         updateTokenCounter();
       });
 
+      item.appendChild(checkboxWrapper);
+      item.appendChild(body);
       messagesList.appendChild(item);
     });
 
-    // Reset checkbox states based on mode
-    updateModeSelection();
+    // Reset mode to full
+    selectedMode = "full";
+    modeFull.checked = true;
     updateTokenCounter();
-  }
-
-  // Helper to escape HTML characters
-  function escapeHtml(text) {
-    return text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
   }
 
   // Select/deselect all checkboxes
@@ -193,74 +234,57 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".message-checkbox").forEach(box => {
       box.checked = checked;
     });
-    updateTokenCounter();
   }
 
-  // Select only the last conversation turn (User prompt + AI Response, or just latest user prompt)
+  // Select only the last conversation turn
   function selectOnlyLastTurn() {
     toggleAllCheckboxes(false);
     const checkboxes = Array.from(document.querySelectorAll(".message-checkbox"));
     if (checkboxes.length > 0) {
-      // Find the last user turn and select from there to the end
       let lastUserIdx = checkboxes.length - 1;
       for (let i = checkboxes.length - 1; i >= 0; i--) {
-        const idx = checkboxes[i].dataset.idx;
+        const idx = parseInt(checkboxes[i].dataset.idx);
         const msg = extractedSession.messages[idx];
         if (msg.role === "user") {
           lastUserIdx = i;
           break;
         }
       }
-      
-      // Check from last user message onwards
+
       for (let i = lastUserIdx; i < checkboxes.length; i++) {
         checkboxes[i].checked = true;
       }
     }
-    updateTokenCounter();
   }
 
-  // Update mode selection based on current mode
-  function updateModeSelection() {
-    // Reset all checkboxes if in full or summary mode
-    if (selectedMode === "full" || selectedMode === "summary") {
-      toggleAllCheckboxes(true);
-    } else if (selectedMode === "selective") {
-      // Keep existing selections for selective mode
-      // No action needed here as checkboxes are already set
-    }
-  }
-
-  // Estimate token count (simplified: ~4 chars per token)
+  // Estimate token count (roughly 4 characters per token)
   function estimateTokenCount() {
     if (!extractedSession || !extractedSession.messages) return 0;
 
     let totalChars = 0;
-    const checkboxes = Array.from(document.querySelectorAll(".message-checkbox:checked"));
-    
-    if (selectedMode === "full" || selectedMode === "summary") {
-      // Use all messages
-      extractedSession.messages.forEach(msg => {
-        totalChars += msg.text.length;
-      });
-    } else if (selectedMode === "selective") {
-      // Use only selected messages
+
+    if (selectedMode === "summary") {
+      // Summary mode uses condensed text
+      const summary = generateSummary();
+      totalChars = summary.length;
+    } else {
+      const checkboxes = Array.from(document.querySelectorAll(".message-checkbox:checked"));
       checkboxes.forEach(box => {
         const idx = parseInt(box.dataset.idx);
-        totalChars += extractedSession.messages[idx].text.length;
+        if (extractedSession.messages[idx]) {
+          totalChars += extractedSession.messages[idx].text.length;
+        }
       });
     }
 
-    // Estimate tokens (roughly 4 characters per token)
     return Math.ceil(totalChars / 4);
   }
 
   // Update token counter and warning
   function updateTokenCounter() {
     const tokenCountEstimate = estimateTokenCount();
-    tokenCount.innerText = `${tokenCountEstimate} tokens`;
-    
-    // Show warning if over 3000 tokens
+    tokenCountEl.innerText = `~${tokenCountEstimate.toLocaleString()} tokens`;
+
     if (tokenCountEstimate > 3000) {
       tokenWarning.classList.add("show");
     } else {
@@ -268,40 +292,40 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Generate formatted context string based on selected turns
+  // Generate formatted context string
   function generateFormattedContext() {
     if (!extractedSession || !extractedSession.messages) return "";
 
     let contextBody = "";
-    
-    if (selectedMode === "full") {
-      // Full context: use all messages
-      extractedSession.messages.forEach(msg => {
-        const sender = msg.role === "user" ? "User" : "AI Assistant";
-        contextBody += `\n[${sender}]:\n${msg.text}\n`;
-      });
-    } else if (selectedMode === "selective") {
-      // Selective mode: use only selected messages
-      const selectedCheckboxes = Array.from(document.querySelectorAll(".message-checkbox:checked"));
-      if (selectedCheckboxes.length === 0) return "";
-      
-      selectedCheckboxes.sort((a, b) => parseInt(a.dataset.idx) - parseInt(b.dataset.idx));
-      
-      selectedCheckboxes.forEach(box => {
+
+    if (selectedMode === "summary") {
+      contextBody = generateSummary();
+    } else {
+      const checkboxes = Array.from(document.querySelectorAll(".message-checkbox:checked"));
+      if (checkboxes.length === 0) return "";
+
+      checkboxes.sort((a, b) => parseInt(a.dataset.idx) - parseInt(b.dataset.idx));
+
+      checkboxes.forEach(box => {
         const idx = parseInt(box.dataset.idx);
         const msg = extractedSession.messages[idx];
+        if (!msg) return;
         const sender = msg.role === "user" ? "User" : "AI Assistant";
         contextBody += `\n[${sender}]:\n${msg.text}\n`;
       });
-    } else if (selectedMode === "summary") {
-      // Summary mode: generate a concise summary
-      contextBody = generateSummary();
     }
 
     const includeHeader = addSummaryPromptCheckbox.checked;
     if (includeHeader) {
-      const source = extractedSession.providerName;
-      return `[Context Transfer: The following conversation log was captured from ${source} via Capsule Hub. Please digest this context and continue the conversation seamlessly.]\n--------------------------------------------${contextBody}--------------------------------------------\n[End of Context. Please confirm you understand the context above and respond to the last User prompt if applicable, or ask how you can help next.]`;
+      const source = extractedSession.providerName || "an AI assistant";
+      return `[CONTEXT TRANSFER FROM ${source.toUpperCase()}]\n` +
+        `The following is a conversation captured from ${source} via Capsule Hub. ` +
+        `Please read the entire context carefully and continue the conversation seamlessly. ` +
+        `If the last message is from the user, respond to it. Otherwise, ask how you can help.\n` +
+        `${'─'.repeat(50)}\n` +
+        `${contextBody}` +
+        `${'─'.repeat(50)}\n` +
+        `[END OF CONTEXT - Please confirm understanding and respond appropriately]`;
     }
 
     return contextBody.trim();
@@ -310,39 +334,42 @@ document.addEventListener("DOMContentLoaded", () => {
   // Generate a summary of the conversation
   function generateSummary() {
     if (!extractedSession || !extractedSession.messages) return "";
-    
-    // Extract key elements for summary
+
     const messages = extractedSession.messages;
     const summaryParts = [];
-    
-    // Always include the first message
+
+    // Extract the initial goal/query
     if (messages.length > 0) {
       const firstMsg = messages[0];
-      summaryParts.push(`Initial query: ${firstMsg.text.substring(0, 100)}${firstMsg.text.length > 100 ? "..." : ""}`);
+      const text = firstMsg.text.substring(0, 200);
+      summaryParts.push(`📌 Initial Request: ${text}${firstMsg.text.length > 200 ? "..." : ""}`);
     }
-    
-    // Include the last message (most recent)
-    if (messages.length > 1) {
-      const lastMsg = messages[messages.length - 1];
-      summaryParts.push(`Final response: ${lastMsg.text.substring(0, 100)}${lastMsg.text.length > 100 ? "..." : ""}`);
-    }
-    
-    // Include key exchanges (user -> assistant pairs)
-    let userMsg = null;
+
+    // Extract key user-assistant exchanges (condensed)
+    let exchangeCount = 0;
     for (let i = 0; i < messages.length; i++) {
-      if (messages[i].role === "user") {
-        userMsg = messages[i];
-      } else if (messages[i].role === "assistant" && userMsg) {
-        // Found a user-assistant pair
-        const userSnippet = userMsg.text.substring(0, 80);
-        const assistantSnippet = messages[i].text.substring(0, 120);
-        summaryParts.push(`Q: ${userSnippet}${userMsg.text.length > 80 ? "..." : ""}\nA: ${assistantSnippet}${messages[i].text.length > 120 ? "..." : ""}`);
-        userMsg = null;
+      if (messages[i].role === "user" && i + 1 < messages.length && messages[i + 1].role === "assistant") {
+        exchangeCount++;
+        if (exchangeCount <= 3 || i > messages.length - 4) {
+          // Include first 3 and last 2 exchanges
+          const userText = messages[i].text.substring(0, 100);
+          const aiText = messages[i + 1].text.substring(0, 150);
+          summaryParts.push(`\n💬 Exchange ${exchangeCount}:\nUser: ${userText}${messages[i].text.length > 100 ? "..." : ""}\nAI: ${aiText}${messages[i + 1].text.length > 150 ? "..." : ""}`);
+        } else if (exchangeCount === 4) {
+          summaryParts.push(`\n... (${messages.filter(m => m.role === "user").length - 5} more exchanges) ...`);
+        }
       }
     }
-    
-    // Create a concise summary
-    return "Summary of conversation:\n" + summaryParts.join("\n\n");
+
+    // Include the final state
+    if (messages.length > 1) {
+      const lastMsg = messages[messages.length - 1];
+      const role = lastMsg.role === "user" ? "User" : "AI";
+      const text = lastMsg.text.substring(0, 200);
+      summaryParts.push(`\n🏁 Final Message (${role}): ${text}${lastMsg.text.length > 200 ? "..." : ""}`);
+    }
+
+    return `📋 CONVERSATION SUMMARY\n${'═'.repeat(40)}\n${summaryParts.join("\n")}\n${'═'.repeat(40)}`;
   }
 
   // Copy selected context to clipboard
@@ -354,16 +381,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     navigator.clipboard.writeText(text).then(() => {
-      showFooterMessage("Context copied to clipboard!", "success");
-      
-      // Pulse badge success
+      showFooterMessage("✅ Context copied to clipboard!", "success");
       chrome.runtime.sendMessage({ action: "updateBadge", text: "✓", color: "#06b6d4" });
       setTimeout(() => {
         chrome.runtime.sendMessage({ action: "updateBadge", text: "" });
       }, 2000);
     }).catch(err => {
-      console.error("Clipboard copy failed:", err);
-      showFooterMessage("Failed to copy to clipboard.", "error");
+      console.error("[Capsule Hub] Clipboard copy failed:", err);
+      showFooterMessage("❌ Failed to copy. Try again.", "error");
     });
   }
 
@@ -372,8 +397,8 @@ document.addEventListener("DOMContentLoaded", () => {
     extractedSession = null;
     chrome.storage.local.remove(["savedSession", "pendingContext"], () => {
       showUnsupportedView();
-      showStatus("Session cleared", "idle");
-      showFooterMessage("Session cleared successfully");
+      showStatus("Cleared", "idle");
+      showFooterMessage("🗑️ Session cleared successfully", "success");
       chrome.runtime.sendMessage({ action: "updateBadge", text: "" });
     });
   }
@@ -390,28 +415,29 @@ document.addEventListener("DOMContentLoaded", () => {
       success: true,
       provider: "manual",
       providerName: "Manual Input",
-      messages: [{ role: "user", text: text }]
+      messages: [{ role: "user", text: text }],
+      timestamp: Date.now()
     };
 
     extractedSession = manualResponse;
     chrome.storage.local.set({ savedSession: manualResponse });
     displaySession(manualResponse);
-    showStatus("Manual context ready", "active");
-    showFooterMessage("Context loaded from manual entry!");
-    manualText.value = ""; // Clear input
+    showStatus("Manual context", "active");
+    showFooterMessage("✅ Manual context loaded!", "success");
+    manualText.value = "";
   }
 
   // Bridge the context into the target AI tool
   function bridgeToTarget(targetAI, url) {
     const text = generateFormattedContext();
     if (!text) {
-      showFooterMessage("Please select at least one message turn!", "error");
+      showFooterMessage("Please select at least one message!", "error");
       return;
     }
 
-    showFooterMessage(`Connecting to ${targetAI.toUpperCase()}...`);
+    showFooterMessage(`🚀 Bridging to ${targetAI}...`);
 
-    // 1. Save pending context with timestamp
+    // Save pending context with timestamp
     const pendingContext = {
       targetAI: targetAI,
       text: text,
@@ -419,23 +445,21 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     chrome.storage.local.set({ pendingContext: pendingContext }, () => {
-      // 2. Request background service worker to open a new tab
+      // Request background to open a new tab
       chrome.runtime.sendMessage({
         action: "openTabAndInject",
         url: url,
         targetAI: targetAI
       }, (response) => {
         if (response && response.success) {
-          showFooterMessage(`Bridged! Injecting context in target... 🚀`);
-          
-          // Flash badge to show bridge in progress
-          chrome.runtime.sendMessage({ action: "updateBadge", text: ">>", color: "#8b5cf6" });
-          
+          showFooterMessage(`✅ Bridged! Injecting in ${targetAI}...`, "success");
+          chrome.runtime.sendMessage({ action: "updateBadge", text: "→", color: "#8b5cf6" });
+
           setTimeout(() => {
-            window.close(); // Close extension popup
-          }, 1000);
+            window.close();
+          }, 1200);
         } else {
-          showFooterMessage(`Failed to launch ${targetAI}. Copying instead...`, "error");
+          showFooterMessage(`❌ Failed to launch. Copying to clipboard instead...`, "error");
           copyContextToClipboard();
         }
       });
@@ -445,20 +469,21 @@ document.addEventListener("DOMContentLoaded", () => {
   // Helper to show temporary messages in the footer
   function showFooterMessage(text, type = "info") {
     footerMessage.innerText = text;
-    
+
     if (type === "error") {
-      footerMessage.style.color = "#f87171"; // Light red
+      footerMessage.style.color = "#f87171";
     } else if (type === "success") {
-      footerMessage.style.color = "#34d399"; // Light green
+      footerMessage.style.color = "#34d399";
     } else {
       footerMessage.style.color = "var(--text-secondary)";
     }
 
-    // Reset after 3.5 seconds
     setTimeout(() => {
-      footerMessage.innerText = "Ready to bridge context";
+      footerMessage.innerText = "🔒 100% local • No data leaves your browser";
       footerMessage.style.color = "var(--text-muted)";
-    }, 3500);
+    }, 4000);
   }
-});
 
+  // Set initial footer message
+  footerMessage.innerText = "🔒 100% local • No data leaves your browser";
+});
