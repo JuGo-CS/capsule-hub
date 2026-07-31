@@ -1,120 +1,140 @@
-// Capsule Hub - Popup Logic
-// 🔒 All data stays local. Zero network calls.
+// Capsule Hub - Popup Controller (Privacy-First)
 
 document.addEventListener("DOMContentLoaded", () => {
-  // ═══ State ═══════════════════════════════════════════════════════
-  let session = null;
-  let mode = "full";
+  // ═══════════════════════════════════════════════════════════════════
+  // State
+  // ═══════════════════════════════════════════════════════════════════
+  
+  let extractedSession = null;
+  let selectedMode = "full";
 
-  // ═══ DOM Elements ════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════
+  // DOM Elements
+  // ═══════════════════════════════════════════════════════════════════
+  
   const $ = (id) => document.getElementById(id);
-
-  const status = $("status");
+  
+  const statusBadge = $("status-badge");
   const statusText = $("status-text");
-  const tabCapture = $("tab-capture");
-  const tabLibrary = $("tab-library");
-  const libraryCount = $("library-count");
+  
   const captureView = $("capture-view");
   const libraryView = $("library-view");
+  
   const emptyState = $("empty-state");
   const capturedState = $("captured-state");
-  const sourceName = $("source-name");
-  const messageCount = $("message-count");
+  
+  const sourceBadge = $("source-badge");
+  const sourceCount = $("source-count");
   const messagesList = $("messages-list");
-  const selectAllBtn = $("select-all");
-  const selectLastBtn = $("select-last");
-  const tokenCount = $("token-count");
-  const tokenWarn = $("token-warn");
+  
+  const btnSelectAll = $("btn-select-all");
+  const btnSelectLast = $("btn-select-last");
   const btnCopy = $("btn-copy");
   const btnSave = $("btn-save");
   const btnClear = $("btn-clear");
   const btnManual = $("btn-manual");
   const manualText = $("manual-text");
+  
+  const tokenCount = $("token-count");
+  const tokenWarn = $("token-warn");
+  
   const libraryList = $("library-list");
   const libraryEmpty = $("library-empty");
+  const searchInput = $("search-input");
 
-  // ═══ Initialization ══════════════════════════════════════════════
-  init();
+  // ═══════════════════════════════════════════════════════════════════
+  // Event Listeners
+  // ═══════════════════════════════════════════════════════════════════
 
-  function init() {
-    bindEvents();
-    checkActiveTab();
-    loadLibrary();
-  }
-
-  // ═══ Event Binding ═══════════════════════════════════════════════
-  function bindEvents() {
-    // Tabs
-    tabCapture.addEventListener("click", () => switchTab("capture"));
-    tabLibrary.addEventListener("click", () => switchTab("library"));
-
-    // Selection
-    selectAllBtn.addEventListener("click", selectAll);
-    selectLastBtn.addEventListener("click", selectLast);
-
-    // Mode
-    document.querySelectorAll('input[name="mode"]').forEach(radio => {
-      radio.addEventListener("change", (e) => {
-        mode = e.target.value;
-        updateTokenCount();
-      });
+  // Tab switching
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const view = tab.dataset.tab;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      
+      captureView.classList.toggle('hidden', view !== 'capture');
+      libraryView.classList.toggle('hidden', view !== 'library');
+      
+      if (view === 'library') loadCapsuleLibrary();
     });
+  });
 
-    // Actions
-    btnCopy.addEventListener("click", copyToClipboard);
-    btnSave.addEventListener("click", saveCapsule);
-    btnClear.addEventListener("click", clearSession);
-    btnManual.addEventListener("click", loadManual);
-
-    // Bridge buttons
-    document.querySelectorAll(".bridge-btn").forEach(btn => {
-      btn.addEventListener("click", () => {
-        bridgeTo(btn.dataset.target, btn.dataset.url);
-      });
+  // Mode selector
+  document.querySelectorAll('.mode-option').forEach(option => {
+    option.addEventListener('click', () => {
+      const mode = option.dataset.mode;
+      selectedMode = mode;
+      option.querySelector('input').checked = true;
+      
+      document.querySelectorAll('.mode-option').forEach(o => o.classList.remove('active'));
+      option.classList.add('active');
+      
+      updateTokenCount();
     });
+  });
 
-    // Message selection
-    messagesList.addEventListener("change", (e) => {
-      if (e.target.classList.contains("message-checkbox")) {
-        updateTokenCount();
-      }
+  // Selection buttons
+  btnSelectAll.addEventListener("click", selectAll);
+  btnSelectLast.addEventListener("click", selectLastTurn);
+  
+  // Action buttons
+  btnCopy.addEventListener("click", copyToClipboard);
+  btnSave.addEventListener("click", saveCapsule);
+  btnClear.addEventListener("click", clearSession);
+  btnManual.addEventListener("click", handleManualBridge);
+  
+  // Bridge buttons
+  document.querySelectorAll(".bridge-card").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      const target = btn.dataset.target;
+      const url = btn.dataset.url;
+      bridgeToTarget(target, url);
     });
-  }
-
-  // ═══ Tab Switching ═══════════════════════════════════════════════
-  function switchTab(tab) {
-    if (tab === "capture") {
-      tabCapture.classList.add("active");
-      tabLibrary.classList.remove("active");
-      captureView.classList.remove("hidden");
-      libraryView.classList.add("hidden");
-    } else {
-      tabLibrary.classList.add("active");
-      tabCapture.classList.remove("active");
-      captureView.classList.add("hidden");
-      libraryView.classList.remove("hidden");
-      loadLibrary();
+  });
+  
+  // Message checkbox changes
+  messagesList.addEventListener("change", (e) => {
+    if (e.target.classList.contains("message-checkbox")) {
+      updateTokenCount();
     }
-  }
+  });
+  
+  // Search
+  searchInput.addEventListener("input", (e) => {
+    filterLibrary(e.target.value);
+  });
 
-  // ═══ Active Tab Check ════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════
+  // Initialization
+  // ═══════════════════════════════════════════════════════════════════
+
+  checkActiveTab();
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Functions
+  // ═══════════════════════════════════════════════════════════════════
+
   function checkActiveTab() {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (!tabs?.length) {
-        showEmpty();
+        showStatus("No active tab", false);
+        showEmptyState();
         return;
       }
 
-      const tab = tabs[0];
-      if (!isSupportedUrl(tab.url)) {
+      const activeTab = tabs[0];
+      const url = activeTab.url || "";
+      
+      if (!isSupportedUrl(url)) {
         loadSavedSession();
         return;
       }
 
-      chrome.tabs.sendMessage(tab.id, { action: "extractContext" }, (response) => {
+      chrome.tabs.sendMessage(activeTab.id, { action: "extractContext" }, (response) => {
         if (chrome.runtime.lastError || !response) {
           chrome.scripting?.executeScript({
-            target: { tabId: tab.id },
+            target: { tabId: activeTab.id },
             files: ['content.js']
           }).catch(() => {});
           loadSavedSession();
@@ -122,10 +142,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (response.success) {
-          session = response;
+          extractedSession = response;
           chrome.storage.local.set({ savedSession: response });
-          renderSession();
-          setStatus("Captured", true);
+          displaySession(response);
+          showStatus("Captured", true);
         } else {
           loadSavedSession();
         }
@@ -134,57 +154,52 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function isSupportedUrl(url) {
-    return /chatgpt\.com|chat\.openai\.com|claude\.ai|gemini\.google\.com|deepseek\.com/.test(url);
+    const supported = ["chatgpt.com", "claude.ai", "gemini.google.com", "chat.deepseek.com", "chat.openai.com"];
+    return supported.some(domain => url.includes(domain));
   }
 
   function loadSavedSession() {
     chrome.storage.local.get("savedSession", (data) => {
       if (data?.savedSession) {
-        session = data.savedSession;
-        renderSession();
-        setStatus("Loaded", true);
+        extractedSession = data.savedSession;
+        displaySession(extractedSession);
+        showStatus("Loaded", true);
       } else {
-        showEmpty();
+        showEmptyState();
       }
     });
   }
 
-  // ═══ UI State ════════════════════════════════════════════════════
-  function showEmpty() {
+  function showEmptyState() {
     emptyState.classList.remove("hidden");
     capturedState.classList.add("hidden");
-    setStatus("Ready", false);
+    showStatus("Ready", false);
   }
 
-  function setStatus(text, active) {
+  function showStatus(text, active) {
     statusText.textContent = text;
-    status.classList.toggle("active", active);
+    statusBadge.classList.toggle("active", active);
   }
 
-  // ═══ Render Session ══════════════════════════════════════════════
-  function renderSession() {
-    if (!session?.messages?.length) {
-      showEmpty();
-      return;
-    }
-
+  function displaySession(session) {
     emptyState.classList.add("hidden");
     capturedState.classList.remove("hidden");
 
-    sourceName.textContent = session.providerName || "AI";
-    messageCount.textContent = `${session.messages.length} msgs`;
+    sourceBadge.textContent = session.providerName || "AI";
+    sourceCount.textContent = `${session.messages.length} messages`;
 
-    renderMessages();
+    renderMessages(session.messages);
     updateTokenCount();
   }
 
-  function renderMessages() {
+  function renderMessages(messages) {
     messagesList.innerHTML = "";
-
-    session.messages.forEach((msg, idx) => {
+    
+    messages.forEach((msg, idx) => {
       const item = document.createElement("div");
       item.className = "message-item";
-
+      
+      const roleText = msg.role === "user" ? "You" : "AI";
       const hasCode = /```/.test(msg.text);
       const snippet = msg.text.substring(0, 80) + (msg.text.length > 80 ? "..." : "");
 
@@ -192,155 +207,187 @@ document.addEventListener("DOMContentLoaded", () => {
         <input type="checkbox" class="message-checkbox" data-idx="${idx}" checked>
         <div class="message-body">
           <div class="message-meta">
-            <span class="role-badge role-${msg.role}">${msg.role === "user" ? "You" : "AI"}</span>
-            ${hasCode ? '<span class="code-badge">&lt;/&gt;</span>' : ''}
+            <span class="role-badge role-${msg.role}">${roleText}</span>
+            ${hasCode ? '<span class="code-badge">&lt;/&gt; code</span>' : ''}
           </div>
           <div class="message-snippet">${escapeHtml(snippet)}</div>
         </div>
       `;
 
+      item.addEventListener("click", (e) => {
+        if (e.target.classList.contains("message-checkbox")) return;
+        const checkbox = item.querySelector(".message-checkbox");
+        checkbox.checked = !checkbox.checked;
+        updateTokenCount();
+      });
+
       messagesList.appendChild(item);
     });
   }
 
-  // ═══ Selection ═══════════════════════════════════════════════════
   function selectAll() {
-    document.querySelectorAll(".message-checkbox").forEach(cb => cb.checked = true);
+    document.querySelectorAll(".message-checkbox").forEach(cb => {
+      cb.checked = true;
+    });
     updateTokenCount();
   }
 
-  function selectLast() {
+  function selectLastTurn() {
     const checkboxes = Array.from(document.querySelectorAll(".message-checkbox"));
     checkboxes.forEach(cb => cb.checked = false);
-
+    
+    if (!checkboxes.length) return;
+    
+    let lastUserIdx = checkboxes.length - 1;
     for (let i = checkboxes.length - 1; i >= 0; i--) {
       const idx = parseInt(checkboxes[i].dataset.idx);
-      if (session.messages[idx]?.role === "user") {
-        checkboxes[i].checked = true;
+      if (extractedSession.messages[idx]?.role === "user") {
+        lastUserIdx = i;
         break;
       }
     }
+    
+    for (let i = lastUserIdx; i < checkboxes.length; i++) {
+      checkboxes[i].checked = true;
+    }
+    
     updateTokenCount();
   }
 
-  // ═══ Token Count ═════════════════════════════════════════════════
   function updateTokenCount() {
-    const text = generateContext();
-    const tokens = Math.ceil(text.length / 4);
-    tokenCount.textContent = `~${tokens.toLocaleString()} tokens`;
-    tokenWarn.classList.toggle("hidden", tokens <= 3000);
+    const text = generateFormattedContext();
+    const count = Math.ceil(text.length / 4);
+    tokenCount.textContent = `~${count.toLocaleString()} tokens`;
+    tokenWarn.classList.toggle("hidden", count <= 3000);
   }
 
-  // ═══ Context Generation ══════════════════════════════════════════
-  function generateContext() {
-    if (!session?.messages) return "";
+  function generateFormattedContext() {
+    if (!extractedSession?.messages) return "";
 
-    let body = "";
+    let contextBody = "";
 
-    if (mode === "summary") {
-      body = generateSummary();
+    if (selectedMode === "summary") {
+      contextBody = generateSummary();
     } else {
-      const checked = Array.from(document.querySelectorAll(".message-checkbox:checked"))
-        .sort((a, b) => parseInt(a.dataset.idx) - parseInt(b.dataset.idx));
+      const checkboxes = Array.from(document.querySelectorAll(".message-checkbox:checked"));
+      if (!checkboxes.length) return "";
 
-      if (!checked.length) return "";
+      checkboxes.sort((a, b) => parseInt(a.dataset.idx) - parseInt(b.dataset.idx));
 
-      checked.forEach(cb => {
-        const msg = session.messages[parseInt(cb.dataset.idx)];
-        if (msg) {
-          const sender = msg.role === "user" ? "User" : "AI";
-          body += `\n[${sender}]:\n${msg.text}\n`;
-        }
+      checkboxes.forEach(box => {
+        const idx = parseInt(box.dataset.idx);
+        const msg = extractedSession.messages[idx];
+        if (!msg) return;
+        const sender = msg.role === "user" ? "User" : "AI Assistant";
+        contextBody += `\n[${sender}]:\n${msg.text}\n`;
       });
     }
 
-    const header = `[CONTEXT FROM ${session.providerName?.toUpperCase() || "AI"}]\n\n` +
-      `Continue this conversation seamlessly. Respond to the last user message.\n\n` +
-      `${'─'.repeat(50)}\n`;
-
-    const footer = `\n${'─'.repeat(50)}\n\n[END - Confirm understanding and respond]`;
-
-    return header + body + footer;
+    const source = extractedSession.providerName || "an AI assistant";
+    return (
+      `[CONTEXT TRANSFER FROM ${source.toUpperCase()}]\n\n` +
+      `Continue this conversation seamlessly. The following is captured context:\n\n` +
+      `${'─'.repeat(50)}\n` +
+      `${contextBody}\n` +
+      `${'─'.repeat(50)}\n\n` +
+      `[END OF CONTEXT - Please confirm understanding and respond to the last user message.]`
+    );
   }
 
   function generateSummary() {
-    if (!session?.messages) return "";
-
-    const msgs = session.messages;
+    if (!extractedSession?.messages) return "";
+    const messages = extractedSession.messages;
     const parts = [];
 
-    // Goal
-    const firstUser = msgs.find(m => m.role === "user");
-    if (firstUser) {
-      parts.push(`🎯 GOAL:\n${firstUser.text.substring(0, 200)}`);
+    parts.push(`📋 CAPSULE SUMMARY — from ${extractedSession.providerName || "AI"}\n${'═'.repeat(50)}`);
+
+    const firstUserMsg = messages.find(m => m.role === "user");
+    if (firstUserMsg) {
+      parts.push(`\n🎯 GOAL:\n${firstUserMsg.text.substring(0, 300)}${firstUserMsg.text.length > 300 ? "..." : ""}`);
     }
 
-    // Code blocks
-    const codeBlocks = [];
-    msgs.forEach(msg => {
-      const matches = msg.text.match(/```[\s\S]*?```/g);
-      if (matches) codeBlocks.push(...matches);
+    const allCodeBlocks = [];
+    messages.forEach((msg, i) => {
+      const codeMatches = msg.text.match(/```[\s\S]*?```/g);
+      if (codeMatches) {
+        codeMatches.forEach(block => {
+          allCodeBlocks.push({ index: i, role: msg.role, code: block });
+        });
+      }
     });
 
-    if (codeBlocks.length) {
-      parts.push(`\n💻 CODE (${codeBlocks.length} blocks):\n${codeBlocks.slice(0, 2).join("\n")}`);
-    }
-
-    // Key exchanges
-    const exchanges = [];
-    for (let i = 0; i < msgs.length; i++) {
-      if (msgs[i].role === "user" && msgs[i + 1]?.role === "assistant") {
-        exchanges.push({ user: msgs[i], ai: msgs[i + 1] });
+    if (allCodeBlocks.length > 0) {
+      parts.push(`\n💻 CODE BLOCKS (${allCodeBlocks.length} found):`);
+      const recentBlocks = allCodeBlocks.slice(-3);
+      recentBlocks.forEach((block, i) => {
+        const trimmed = block.code.length > 200 ? block.code.substring(0, 200) + "\n... (truncated)" : block.code;
+        parts.push(`\n[Code Block ${i + 1} — from ${block.role}]:\n${trimmed}`);
+      });
+      if (allCodeBlocks.length > 3) {
+        parts.push(`\n... and ${allCodeBlocks.length - 3} more code blocks`);
       }
     }
 
-    if (exchanges.length) {
-      const shown = exchanges.slice(0, 2).concat(exchanges.slice(-1));
-      parts.push(`\n💬 KEY EXCHANGES:\n` + shown.map(ex =>
-        `• User: ${ex.user.text.substring(0, 80)}...\n  AI: ${ex.ai.text.substring(0, 100)}...`
-      ).join("\n"));
+    const exchanges = [];
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i].role === "user" && i + 1 < messages.length && messages[i + 1].role === "assistant") {
+        exchanges.push({ user: messages[i], assistant: messages[i + 1], idx: i });
+      }
     }
 
-    // Current state
-    const last = msgs[msgs.length - 1];
-    if (last) {
-      parts.push(`\n🏁 CURRENT:\n${last.text.substring(0, 200)}`);
+    if (exchanges.length > 0) {
+      parts.push(`\n💬 KEY EXCHANGES (${exchanges.length} total):`);
+      const toShow = exchanges.slice(0, 2).concat(exchanges.slice(-2));
+      const shown = new Set();
+      toShow.forEach(ex => {
+        if (shown.has(ex.idx)) return;
+        shown.add(ex.idx);
+        const userSnippet = ex.user.text.substring(0, 120);
+        const aiSnippet = ex.assistant.text.substring(0, 180);
+        parts.push(`\n• User: ${userSnippet}${ex.user.text.length > 120 ? "..." : ""}\n  AI: ${aiSnippet}${ex.assistant.text.length > 180 ? "..." : ""}`);
+      });
     }
 
+    if (messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      const role = lastMsg.role === "user" ? "Pending user request" : "Last AI response";
+      parts.push(`\n🏁 CURRENT STATE:\n[${role}]: ${lastMsg.text.substring(0, 300)}${lastMsg.text.length > 300 ? "..." : ""}`);
+    }
+
+    parts.push(`\n${'═'.repeat(50)}`);
     return parts.join("\n");
   }
 
-  // ═══ Actions ═════════════════════════════════════════════════════
   function copyToClipboard() {
-    const text = generateContext();
+    const text = generateFormattedContext();
     if (!text) {
-      showToast("No messages selected", "error");
+      showFooterMessage("No messages selected!", "error");
       return;
     }
 
     navigator.clipboard.writeText(text).then(() => {
-      showToast("Copied to clipboard!", "success");
+      showFooterMessage("✅ Copied to clipboard!", "success");
+    }).catch(() => {
+      showFooterMessage("❌ Failed to copy", "error");
     });
   }
 
   function saveCapsule() {
-    const text = generateContext();
+    const text = generateFormattedContext();
     if (!text) {
-      showToast("No messages selected", "error");
+      showFooterMessage("No messages selected!", "error");
       return;
     }
 
-    const firstUser = session.messages.find(m => m.role === "user");
-    const title = firstUser?.text.substring(0, 40) || "Untitled";
-
     const capsule = {
-      id: Date.now().toString(36),
-      title,
-      provider: session.providerName,
-      text,
-      messageCount: session.messages.length,
-      tokens: Math.ceil(text.length / 4),
-      timestamp: Date.now()
+      id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
+      title: generateCapsuleTitle(),
+      provider: extractedSession.providerName || "Manual",
+      mode: selectedMode,
+      text: text,
+      messageCount: extractedSession.messages.length,
+      timestamp: Date.now(),
+      tokenEstimate: Math.ceil(text.length / 4)
     };
 
     chrome.storage.local.get("capsuleLibrary", (data) => {
@@ -349,74 +396,26 @@ document.addEventListener("DOMContentLoaded", () => {
       if (library.length > 50) library.length = 50;
 
       chrome.storage.local.set({ capsuleLibrary: library }, () => {
-        showToast("Capsule saved!", "success");
-        loadLibrary();
+        showFooterMessage(`💊 Capsule saved! (${library.length} in library)`, "success");
       });
     });
   }
 
-  function clearSession() {
-    session = null;
-    chrome.storage.local.remove(["savedSession", "pendingContext"], () => {
-      showEmpty();
-      showToast("Cleared", "success");
-    });
-  }
-
-  function loadManual() {
-    const text = manualText.value.trim();
-    if (!text) {
-      showToast("Enter text first", "error");
-      return;
+  function generateCapsuleTitle() {
+    if (!extractedSession?.messages?.length) return "Untitled Capsule";
+    const firstUser = extractedSession.messages.find(m => m.role === "user");
+    if (firstUser) {
+      const title = firstUser.text.substring(0, 50).replace(/\n/g, ' ').trim();
+      return title + (firstUser.text.length > 50 ? "..." : "");
     }
-
-    session = {
-      provider: "manual",
-      providerName: "Manual",
-      messages: [{ role: "user", text }],
-      timestamp: Date.now()
-    };
-
-    chrome.storage.local.set({ savedSession: session });
-    renderSession();
-    setStatus("Loaded", true);
-    showToast("Manual context loaded", "success");
-    manualText.value = "";
+    return `Capsule from ${extractedSession.providerName}`;
   }
 
-  // ═══ Bridge ══════════════════════════════════════════════════════
-  function bridgeTo(target, url) {
-    const text = generateContext();
-    if (!text) {
-      showToast("No messages selected", "error");
-      return;
-    }
-
-    const pending = { targetAI: target, text, timestamp: Date.now() };
-
-    chrome.storage.local.set({ pendingContext: pending }, () => {
-      chrome.runtime.sendMessage({
-        action: "openTabAndInject",
-        url,
-        targetAI: target
-      }, (response) => {
-        if (response?.success) {
-          showToast(`Bridging to ${target}...`, "success");
-          setTimeout(() => window.close(), 1000);
-        } else {
-          copyToClipboard();
-        }
-      });
-    });
-  }
-
-  // ═══ Library ═════════════════════════════════════════════════════
-  function loadLibrary() {
+  function loadCapsuleLibrary() {
     chrome.storage.local.get("capsuleLibrary", (data) => {
       const library = data?.capsuleLibrary || [];
-      libraryCount.textContent = library.length;
-
-      if (!library.length) {
+      
+      if (library.length === 0) {
         libraryList.innerHTML = "";
         libraryEmpty.classList.remove("hidden");
         return;
@@ -429,25 +428,24 @@ document.addEventListener("DOMContentLoaded", () => {
         const item = document.createElement("div");
         item.className = "library-item";
         item.draggable = true;
-        item.dataset.idx = idx;
 
         const date = new Date(capsule.timestamp);
-        const dateStr = date.toLocaleDateString();
+        const dateStr = date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         item.innerHTML = `
           <div class="library-item-header">
-            <div class="library-item-title">${escapeHtml(capsule.title)}</div>
-            <div class="library-item-provider">${escapeHtml(capsule.provider || "Manual")}</div>
+            <span class="library-item-title">${escapeHtml(capsule.title)}</span>
+            <span class="library-item-provider">${escapeHtml(capsule.provider || "Manual")}</span>
           </div>
           <div class="library-item-meta">
             <span>${capsule.messageCount} msgs</span>
-            <span>~${capsule.tokens?.toLocaleString() || "?"} tokens</span>
+            <span>~${capsule.tokenEstimate?.toLocaleString() || '?'} tokens</span>
             <span>${dateStr}</span>
           </div>
           <div class="library-item-actions">
-            <button class="lib-btn lib-btn-primary" data-action="use">Use</button>
-            <button class="lib-btn" data-action="copy">Copy</button>
-            <button class="lib-btn" data-action="delete">Delete</button>
+            <button class="lib-btn lib-btn-primary" data-idx="${idx}" data-action="use">Use</button>
+            <button class="lib-btn" data-idx="${idx}" data-action="copy">Copy</button>
+            <button class="lib-btn" data-idx="${idx}" data-action="delete">Delete</button>
           </div>
         `;
 
@@ -467,14 +465,11 @@ document.addEventListener("DOMContentLoaded", () => {
           btn.addEventListener("click", (e) => {
             e.stopPropagation();
             const action = btn.dataset.action;
+            const idx = parseInt(btn.dataset.idx);
 
-            if (action === "use") {
-              useCapsule(idx);
-            } else if (action === "copy") {
-              copyCapsule(idx);
-            } else if (action === "delete") {
-              deleteCapsule(idx);
-            }
+            if (action === "use") useCapsule(idx);
+            else if (action === "copy") copyCapsule(idx);
+            else if (action === "delete") deleteCapsule(idx);
           });
         });
 
@@ -483,23 +478,36 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function filterLibrary(query) {
+    const items = libraryList.querySelectorAll(".library-item");
+    query = query.toLowerCase();
+    
+    items.forEach(item => {
+      const title = item.querySelector(".library-item-title").textContent.toLowerCase();
+      const provider = item.querySelector(".library-item-provider").textContent.toLowerCase();
+      const match = title.includes(query) || provider.includes(query);
+      item.style.display = match ? "" : "none";
+    });
+  }
+
   function useCapsule(idx) {
     chrome.storage.local.get("capsuleLibrary", (data) => {
       const capsule = data?.capsuleLibrary?.[idx];
       if (!capsule) return;
 
-      session = {
-        provider: capsule.provider?.toLowerCase(),
-        providerName: capsule.provider,
+      extractedSession = {
+        provider: capsule.provider?.toLowerCase() || "manual",
+        providerName: capsule.provider || "Saved Capsule",
         messages: [{ role: "user", text: capsule.text }],
         timestamp: capsule.timestamp
       };
-
-      chrome.storage.local.set({ savedSession: session });
-      renderSession();
-      setStatus("Loaded", true);
-      switchTab("capture");
-      showToast("Capsule loaded", "success");
+      
+      chrome.storage.local.set({ savedSession: extractedSession });
+      displaySession(extractedSession);
+      showStatus("Loaded", true);
+      
+      document.querySelector('.tab[data-tab="capture"]').click();
+      showFooterMessage("💊 Capsule loaded!", "success");
     });
   }
 
@@ -507,9 +515,9 @@ document.addEventListener("DOMContentLoaded", () => {
     chrome.storage.local.get("capsuleLibrary", (data) => {
       const capsule = data?.capsuleLibrary?.[idx];
       if (!capsule) return;
-
+      
       navigator.clipboard.writeText(capsule.text).then(() => {
-        showToast("Copied!", "success");
+        showFooterMessage("📋 Copied to clipboard!", "success");
       });
     });
   }
@@ -518,21 +526,80 @@ document.addEventListener("DOMContentLoaded", () => {
     chrome.storage.local.get("capsuleLibrary", (data) => {
       const library = data?.capsuleLibrary || [];
       library.splice(idx, 1);
-
+      
       chrome.storage.local.set({ capsuleLibrary: library }, () => {
-        showToast("Deleted", "success");
-        loadLibrary();
+        showFooterMessage("🗑️ Capsule deleted", "success");
+        loadCapsuleLibrary();
       });
     });
   }
 
-  // ═══ Toast ═══════════════════════════════════════════════════════
-  function showToast(message, type = "info") {
-    // Simple toast using footer for now
+  function clearSession() {
+    extractedSession = null;
+    chrome.storage.local.remove(["savedSession", "pendingContext"], () => {
+      showEmptyState();
+      showFooterMessage("🗑️ Session cleared", "success");
+    });
+  }
+
+  function handleManualBridge() {
+    const text = manualText.value.trim();
+    if (!text) {
+      showToast("Enter text first", "error");
+      return;
+    }
+
+    session = {
+      provider: "manual",
+      providerName: "Manual Input",
+      messages: [{ role: "user", text: text }],
+      timestamp: Date.now()
+    };
+
+    extractedSession = manualResponse;
+    chrome.storage.local.set({ savedSession: manualResponse });
+    displaySession(manualResponse);
+    showStatus("Loaded", true);
+    showFooterMessage("✅ Manual context loaded!", "success");
+    manualText.value = "";
+  }
+
+  function bridgeToTarget(targetAI, url) {
+    const text = generateFormattedContext();
+    if (!text) {
+      showFooterMessage("Please select at least one message!", "error");
+      return;
+    }
+
+    showFooterMessage(`🚀 Bridging to ${targetAI}...`, "info");
+
+    const pendingContext = { targetAI, text, timestamp: Date.now() };
+
+    chrome.storage.local.set({ pendingContext }, () => {
+      chrome.runtime.sendMessage({
+        action: "openTabAndInject",
+        url,
+        targetAI
+      }, (response) => {
+        if (response?.success) {
+          showFooterMessage(`✅ Injecting in ${targetAI}...`, "success");
+          setTimeout(() => window.close(), 1200);
+        } else {
+          showFooterMessage("❌ Failed. Copying to clipboard...", "error");
+          copyToClipboard();
+        }
+      });
+    });
+  }
+
+  function showFooterMessage(text, type = "info") {
     const footer = document.querySelector(".footer-text");
     const original = footer.textContent;
-    footer.textContent = message;
-    footer.style.color = type === "success" ? "#10b981" : type === "error" ? "#ef4444" : "#94a3b8";
+    footer.textContent = text;
+    
+    if (type === "error") footer.style.color = "#f87171";
+    else if (type === "success") footer.style.color = "#34d399";
+    else footer.style.color = "";
 
     setTimeout(() => {
       footer.textContent = original;
@@ -540,8 +607,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 3000);
   }
 
-  // ═══ Utilities ═══════════════════════════════════════════════════
-  function escapeHtml(text) {
+  function escapeHTML(text) {
     const div = document.createElement("div");
     div.textContent = text;
     return div.innerHTML;
