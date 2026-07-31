@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Capsule Hub - AI Context Bridge",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Capture conversation context from one AI and continue in another instantly. 100% local, privacy-first, open-source.",
   "icons": {
     "16": "icon16.png",

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+/* 🔒 No external font imports — all requests stay local for privacy */
 
 :root {
   /* Color System */
@@ -26,8 +26,8 @@
   --shadow-glow: 0 0 20px rgba(139, 92, 246, 0.15);
   --shadow-btn-glow: 0 4px 15px rgba(6, 182, 212, 0.3);
 
-  /* Font Family */
-  --font-family: 'Outfit', 'Plus Jakarta Sans', -apple-system, sans-serif;
+  /* Font Family - System fonts only, no external requests */
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
 * {
@@ -785,3 +785,258 @@ footer {
   white-space: nowrap;
   margin-left: 8px;
 }
+
+/* ─── Tab Navigation ─────────────────────────────────────────────── */
+.tab-nav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 3px;
+  background: var(--bg-card);
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  z-index: 1;
+  position: relative;
+}
+
+.tab-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.tab-btn.active {
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.tab-icon {
+  font-size: 12px;
+}
+
+.tab-badge {
+  background: rgba(6, 182, 212, 0.2);
+  color: var(--color-cyan);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 10px;
+  margin-left: 2px;
+}
+
+/* ─── Code Badge ─────────────────────────────────────────────────── */
+.code-badge {
+  font-size: 8px;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(6, 182, 212, 0.15);
+  color: var(--color-cyan);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  margin-left: 6px;
+}
+
+/* ─── Capsule Actions (Save + Export) ────────────────────────────── */
+.capsule-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.capsule-save-btn {
+  flex: 1;
+  background: rgba(139, 92, 246, 0.15) !important;
+  color: #c084fc !important;
+  border: 1px solid rgba(139, 92, 246, 0.3) !important;
+}
+
+.capsule-save-btn:hover {
+  background: rgba(139, 92, 246, 0.25) !important;
+  border-color: rgba(139, 92, 246, 0.5) !important;
+}
+
+.capsule-export-btn {
+  flex: 1;
+  background: rgba(6, 182, 212, 0.1) !important;
+  color: var(--color-cyan) !important;
+  border: 1px solid rgba(6, 182, 212, 0.2) !important;
+}
+
+.capsule-export-btn:hover {
+  background: rgba(6, 182, 212, 0.2) !important;
+  border-color: rgba(6, 182, 212, 0.4) !important;
+}
+
+/* ─── Capsule Library View ───────────────────────────────────────── */
+.library-header {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.library-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.library-subtitle {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.library-scroll-container {
+  max-height: 340px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.library-scroll-container::-webkit-scrollbar {
+  width: 4px;
+}
+.library-scroll-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.library-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 10px;
+  transition: border-color 0.2s ease;
+}
+
+.library-item:hover {
+  border-color: var(--border-hover);
+}
+
+.library-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.library-item-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.library-item-provider {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.library-item-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.library-item-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.lib-btn {
+  font-family: var(--font-family);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+}
+
+.lib-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.lib-use-btn {
+  background: rgba(139, 92, 246, 0.1);
+  color: #c084fc;
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.lib-use-btn:hover {
+  background: rgba(139, 92, 246, 0.2);
+}
+
+.lib-copy-btn {
+  background: rgba(6, 182, 212, 0.1);
+  color: var(--color-cyan);
+  border-color: rgba(6, 182, 212, 0.2);
+}
+
+.lib-copy-btn:hover {
+  background: rgba(6, 182, 212, 0.2);
+}
+
+.lib-delete-btn {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
+.lib-delete-btn:hover {
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.library-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+}
+
+.library-empty .empty-icon {
+  font-size: 36px;
+  margin-bottom: 10px;
+  opacity: 0.5;
+}
+
+.library-empty p {
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.library-empty .empty-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
