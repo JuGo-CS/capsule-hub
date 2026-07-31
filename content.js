@@ -346,6 +346,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
     return true;
   }
+  
+  if (request.action === "injectContext") {
+    const { text, targetAI } = request;
+    console.log("Received context injection request for:", targetAI);
+    
+    // Verify we're on the correct target domain
+    const currentProvider = detectCurrentProvider();
+    if (currentProvider === targetAI) {
+      startInjectionPolling(text);
+      sendResponse({ success: true });
+    } else {
+      console.warn("Target AI mismatch:", { currentProvider, targetAI });
+      sendResponse({ success: false, error: "Wrong target AI page" });
+    }
+    return true;
+  }
   return true;
 });
 
