@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
   
   let extractedSession = null;
   let selectedMode = "full";
+  let allCapsules = []; // Store all capsules for filtering
 
   // ═══════════════════════════════════════════════════════════════════
   // DOM Elements
@@ -264,33 +265,31 @@ document.addEventListener("DOMContentLoaded", () => {
   function generateFormattedContext() {
     if (!extractedSession?.messages) return "";
 
-    let contextBody = "";
-
-    if (selectedMode === "summary") {
-      contextBody = generateSummary();
-    } else {
+    // Use the new intelligent context processor
+    // Filter messages based on selected mode and checkboxes
+    let messagesToProcess = extractedSession.messages;
+    
+    if (selectedMode === "selective") {
       const checkboxes = Array.from(document.querySelectorAll(".message-checkbox:checked"));
       if (!checkboxes.length) return "";
 
-      checkboxes.sort((a, b) => parseInt(a.dataset.idx) - parseInt(b.dataset.idx));
-
-      checkboxes.forEach(box => {
-        const idx = parseInt(box.dataset.idx);
-        const msg = extractedSession.messages[idx];
-        if (!msg) return;
-        const sender = msg.role === "user" ? "User" : "AI Assistant";
-        contextBody += `\n[${sender}]:\n${msg.text}\n`;
-      });
+      const selectedIndices = checkboxes
+        .map(cb => parseInt(cb.dataset.idx))
+        .sort((a, b) => a - b);
+      
+      messagesToProcess = selectedIndices
+        .map(idx => extractedSession.messages[idx])
+        .filter(Boolean);
     }
 
-    const source = extractedSession.providerName || "an AI assistant";
-    return (
-      `[CONTEXT TRANSFER FROM ${source.toUpperCase()}]\n\n` +
-      `Continue this conversation seamlessly. The following is captured context:\n\n` +
-      `${'─'.repeat(50)}\n` +
-      `${contextBody}\n` +
-      `${'─'.repeat(50)}\n\n` +
-      `[END OF CONTEXT - Please confirm understanding and respond to the last user message.]`
+    // Use the new sectioned output formatter
+    return formatSectionedOutput(
+      messagesToProcess,
+      extractedSession.providerName || "AI Assistant",
+      {
+        includeHeader: true,
+        mode: selectedMode
+      }
     );
   }
 
@@ -414,6 +413,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function loadCapsuleLibrary() {
     chrome.storage.local.get("capsuleLibrary", (data) => {
       const library = data?.capsuleLibrary || [];
+      allCapsules = library; // Store for filtering
       
       if (library.length === 0) {
         libraryList.innerHTML = "";
@@ -422,72 +422,77 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       libraryEmpty.classList.add("hidden");
-      libraryList.innerHTML = "";
+      renderCapsuleList(library);
+    });
+  }
 
-      library.forEach((capsule, idx) => {
-        const item = document.createElement("div");
-        item.className = "library-item";
-        item.draggable = true;
+  function renderCapsuleList(capsules) {
+    libraryList.innerHTML = "";
 
-        const date = new Date(capsule.timestamp);
-        const dateStr = date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (capsules.length === 0) {
+      libraryEmpty.classList.remove("hidden");
+      return;
+    }
 
-        item.innerHTML = `
-          <div class="library-item-header">
-            <span class="library-item-title">${escapeHTML(capsule.title)}</span>
-            <span class="library-item-provider">${escapeHTML(capsule.provider || "Manual")}</span>
-          </div>
-          <div class="library-item-meta">
-            <span>${capsule.messageCount} msgs</span>
-            <span>~${capsule.tokenEstimate?.toLocaleString() || '?'} tokens</span>
-            <span>${dateStr}</span>
-          </div>
-          <div class="library-item-actions">
-            <button class="lib-btn lib-btn-primary" data-idx="${idx}" data-action="use">Use</button>
-            <button class="lib-btn" data-idx="${idx}" data-action="copy">Copy</button>
-            <button class="lib-btn" data-idx="${idx}" data-action="delete">Delete</button>
-          </div>
-        `;
+    libraryEmpty.classList.add("hidden");
 
-        // Drag and drop
-        item.addEventListener("dragstart", (e) => {
-          e.dataTransfer.setData("text/plain", capsule.text);
-          e.dataTransfer.effectAllowed = "copy";
-          item.style.opacity = "0.5";
-        });
+    capsules.forEach((capsule, idx) => {
+      const item = document.createElement("div");
+      item.className = "library-item";
+      item.draggable = true;
 
-        item.addEventListener("dragend", () => {
-          item.style.opacity = "1";
-        });
+      const date = new Date(capsule.timestamp);
+      const dateStr = date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-        // Button actions
-        item.querySelectorAll(".lib-btn").forEach(btn => {
-          btn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            const action = btn.dataset.action;
-            const idx = parseInt(btn.dataset.idx);
+      item.innerHTML = `
+        <div class="library-item-header">
+          <span class="library-item-title">${escapeHTML(capsule.title)}</span>
+          <span class="library-item-provider">${escapeHTML(capsule.provider || "Manual")}</span>
+        </div>
+        <div class="library-item-meta">
+          <span>${capsule.messageCount} msgs</span>
+          <span>~${capsule.tokenEstimate?.toLocaleString() || '?'} tokens</span>
+          <span>${dateStr}</span>
+        </div>
+        <div class="library-item-actions">
+          <button class="lib-btn lib-btn-primary" data-idx="${idx}" data-action="use">Use</button>
+          <button class="lib-btn" data-idx="${idx}" data-action="copy">Copy</button>
+          <button class="lib-btn" data-idx="${idx}" data-action="delete">Delete</button>
+        </div>
+      `;
 
-            if (action === "use") useCapsule(idx);
-            else if (action === "copy") copyCapsule(idx);
-            else if (action === "delete") deleteCapsule(idx);
-          });
-        });
-
-        libraryList.appendChild(item);
+      // Drag and drop
+      item.addEventListener("dragstart", (e) => {
+        e.dataTransfer.setData("text/plain", capsule.text);
+        e.dataTransfer.effectAllowed = "copy";
+        item.style.opacity = "0.5";
       });
+
+      item.addEventListener("dragend", () => {
+        item.style.opacity = "1";
+      });
+
+      // Button actions - use original index from allCapsules
+      const originalIdx = allCapsules.indexOf(capsule);
+      item.querySelectorAll(".lib-btn").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const action = btn.dataset.action;
+
+          if (action === "use") useCapsule(originalIdx);
+          else if (action === "copy") copyCapsule(originalIdx);
+          else if (action === "delete") deleteCapsule(originalIdx);
+        });
+      });
+
+      libraryList.appendChild(item);
     });
   }
 
   function filterLibrary(query) {
-    const items = libraryList.querySelectorAll(".library-item");
-    query = query.toLowerCase();
-    
-    items.forEach(item => {
-      const title = item.querySelector(".library-item-title").textContent.toLowerCase();
-      const provider = item.querySelector(".library-item-provider").textContent.toLowerCase();
-      const match = title.includes(query) || provider.includes(query);
-      item.style.display = match ? "" : "none";
-    });
+    // Use the new full-text search function
+    const filtered = searchCapsules(allCapsules, query);
+    renderCapsuleList(filtered);
   }
 
   function useCapsule(idx) {
@@ -550,11 +555,11 @@ document.addEventListener("DOMContentLoaded", () => {
   function handleManualBridge() {
     const text = manualText.value.trim();
     if (!text) {
-      showToast("Enter text first", "error");
+      showFooterMessage("Enter text first", "error");
       return;
     }
 
-    session = {
+    const manualResponse = {
       provider: "manual",
       providerName: "Manual Input",
       messages: [{ role: "user", text: text }],
