@@ -1,5 +1,5 @@
 // Capsule Hub - Popup Controller
-// Clean, minimal interface for context compression
+// Intelligent context compression using AI
 
 document.addEventListener("DOMContentLoaded", () => {
   // State
@@ -54,17 +54,16 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      chrome.tabs.sendMessage(tab.id, { action: "extractContext" }, (response) => {
+      chrome.tabs.sendMessage(tab.id, { action: "extractMessages" }, (response) => {
         if (chrome.runtime.lastError || !response) {
           // Try injecting content script
           chrome.scripting?.executeScript({
             target: { tabId: tab.id },
             files: ['content.js']
           }).then(() => {
-            // Retry after injection
             setTimeout(() => {
-              chrome.tabs.sendMessage(tab.id, { action: "extractContext" }, (response) => {
-                handleExtractionResponse(response);
+              chrome.tabs.sendMessage(tab.id, { action: "extractMessages" }, (response) => {
+                handleDetectionResponse(response);
               });
             }, 500);
           }).catch(() => {
@@ -74,21 +73,35 @@ document.addEventListener("DOMContentLoaded", () => {
           return;
         }
 
-        handleExtractionResponse(response);
+        handleDetectionResponse(response);
       });
     });
   }
 
-  function handleExtractionResponse(response) {
+  function handleDetectionResponse(response) {
     if (response?.success && response.messages?.length > 0) {
-      currentSession = response;
+      currentSession = {
+        messages: response.messages,
+        provider: response.provider
+      };
       const msgCount = response.messages.length;
-      setStatus(`Detected ${msgCount} messages from ${response.providerName}`, "active");
+      const providerName = getProviderName(response.provider);
+      setStatus(`✓ ${msgCount} messages from ${providerName}`, "active");
       enableActions();
     } else {
       setStatus("No conversation found. Start chatting first!", "error");
       disableActions();
     }
+  }
+
+  function getProviderName(providerKey) {
+    const names = {
+      chatgpt: "ChatGPT",
+      claude: "Claude",
+      gemini: "Gemini",
+      deepseek: "DeepSeek"
+    };
+    return names[providerKey] || "AI";
   }
 
   function isSupportedUrl(url) {
@@ -117,21 +130,35 @@ document.addEventListener("DOMContentLoaded", () => {
     btnCopyContext.disabled = true;
   }
 
-  // Save Capsule
-  function saveCapsule() {
+  // Save Capsule - Uses AI to create intelligent summary
+  async function saveCapsule() {
     if (!currentSession?.messages) {
       showToast("No conversation to save", "error");
       return;
     }
 
+    // Disable button and show progress
+    btnSaveCapsule.disabled = true;
+    btnSaveCapsule.innerHTML = '<span class="btn-icon">⏳</span><span>Creating capsule...</span>';
+
     try {
-      // Create intelligent capsule
-      const capsule = createCapsule(currentSession.messages, currentSession.providerName);
-      
-      if (!capsule) {
-        showToast("Failed to create capsule", "error");
-        return;
+      // Get active tab
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tabs?.length) {
+        throw new Error("No active tab");
       }
+
+      // Send message to content script to create capsule using AI
+      const response = await chrome.tabs.sendMessage(tabs[0].id, { action: "createCapsule" });
+
+      if (!response?.success) {
+        throw new Error(response?.error || "Failed to create capsule");
+      }
+
+      const capsule = response.capsule;
+
+      // Generate intelligent name from capsule content
+      const capsuleName = generateCapsuleName(capsule.text);
 
       // Save to storage
       chrome.storage.local.get("capsuleLibrary", (data) => {
@@ -139,10 +166,11 @@ document.addEventListener("DOMContentLoaded", () => {
         
         const capsuleData = {
           id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
-          name: capsule.name,
+          name: capsuleName,
           text: capsule.text,
-          metadata: capsule.metadata,
-          timestamp: Date.now()
+          messageCount: capsule.messageCount,
+          provider: capsule.provider,
+          timestamp: capsule.timestamp
         };
 
         library.unshift(capsuleData);
@@ -151,39 +179,82 @@ document.addEventListener("DOMContentLoaded", () => {
         if (library.length > 50) library.length = 50;
 
         chrome.storage.local.set({ capsuleLibrary: library }, () => {
-          showToast(`💊 Capsule saved: ${capsule.name}`, "success");
+          showToast(`💊 Capsule saved: ${capsuleName}`, "success");
           loadCapsuleLibrary();
+          
+          // Re-enable button
+          btnSaveCapsule.disabled = false;
+          btnSaveCapsule.innerHTML = '<span class="btn-icon">💊</span><span>Save Capsule</span>';
         });
       });
     } catch (error) {
       console.error("[Capsule Hub] Save error:", error);
-      showToast("Failed to save capsule", "error");
+      showToast(error.message || "Failed to create capsule", "error");
+      
+      // Re-enable button
+      btnSaveCapsule.disabled = false;
+      btnSaveCapsule.innerHTML = '<span class="btn-icon">💊</span><span>Save Capsule</span>';
     }
   }
 
-  // Copy Context
-  function copyContext() {
+  // Generate intelligent name from capsule content
+  function generateCapsuleName(capsuleText) {
+    // Try to extract OBJECTIVE section
+    const objectiveMatch = capsuleText.match(/## OBJECTIVE\s*\n(.+?)(?=\n##|\n\[END)/s);
+    if (objectiveMatch) {
+      let objective = objectiveMatch[1].trim();
+      // Take first sentence or first 60 chars
+      const firstSentence = objective.split(/[.!?]/)[0];
+      if (firstSentence.length > 60) {
+        return firstSentence.substring(0, 57) + "...";
+      }
+      return firstSentence;
+    }
+
+    // Fallback: first line that's not a header
+    const lines = capsuleText.split('\n').filter(l => l.trim() && !l.startsWith('#') && !l.startsWith('['));
+    if (lines.length > 0) {
+      let firstLine = lines[0].trim();
+      if (firstLine.length > 60) {
+        return firstLine.substring(0, 57) + "...";
+      }
+      return firstLine;
+    }
+
+    // Last resort
+    return `Capsule ${new Date().toLocaleDateString()}`;
+  }
+
+  // Copy Context - Also uses AI
+  async function copyContext() {
     if (!currentSession?.messages) {
       showToast("No conversation to copy", "error");
       return;
     }
 
+    btnCopyContext.disabled = true;
+    btnCopyContext.innerHTML = '<span class="btn-icon">⏳</span><span>Creating...</span>';
+
     try {
-      const capsule = createCapsule(currentSession.messages, currentSession.providerName);
-      
-      if (!capsule) {
-        showToast("Failed to create context", "error");
-        return;
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tabs?.length) {
+        throw new Error("No active tab");
       }
 
-      navigator.clipboard.writeText(capsule.text).then(() => {
-        showToast("✅ Context copied to clipboard", "success");
-      }).catch(() => {
-        showToast("Failed to copy", "error");
-      });
+      const response = await chrome.tabs.sendMessage(tabs[0].id, { action: "createCapsule" });
+
+      if (!response?.success) {
+        throw new Error(response?.error || "Failed to create context");
+      }
+
+      await navigator.clipboard.writeText(response.capsule.text);
+      showToast("✅ Context copied to clipboard", "success");
     } catch (error) {
       console.error("[Capsule Hub] Copy error:", error);
-      showToast("Failed to copy context", "error");
+      showToast(error.message || "Failed to copy", "error");
+    } finally {
+      btnCopyContext.disabled = false;
+      btnCopyContext.innerHTML = '<span class="btn-icon">📋</span><span>Copy Context</span>';
     }
   }
 
@@ -196,7 +267,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     currentSession = {
-      providerName: "Manual Input",
+      provider: "manual",
       messages: [{ role: "user", text: text }]
     };
 
@@ -249,8 +320,8 @@ document.addEventListener("DOMContentLoaded", () => {
     item.innerHTML = `
       <div class="capsule-name">${escapeHTML(capsule.name)}</div>
       <div class="capsule-meta">
-        <span>${capsule.metadata?.provider || 'Unknown'}</span>
-        <span>${capsule.metadata?.messageCount || '?'} msgs</span>
+        <span>${capsule.provider || 'Unknown'}</span>
+        <span>${capsule.messageCount || '?'} msgs</span>
         <span>${dateStr}</span>
       </div>
       <div class="capsule-actions">
@@ -314,7 +385,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Filter Capsules
   function filterCapsules(query) {
-    const filtered = searchCapsules(allCapsules, query);
+    if (!query || query.trim() === '') {
+      renderCapsules(allCapsules);
+      return;
+    }
+
+    const searchTerm = query.toLowerCase();
+    const filtered = allCapsules.filter(capsule => {
+      if (capsule.name && capsule.name.toLowerCase().includes(searchTerm)) return true;
+      if (capsule.text && capsule.text.toLowerCase().includes(searchTerm)) return true;
+      return false;
+    });
+
     renderCapsules(filtered);
   }
 
