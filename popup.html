@@ -9,180 +9,42 @@
 <body>
   <div class="app">
     <!-- Header -->
-    <div class="header">
-      <div class="header-left">
-        <img src="icon48.png" alt="" class="header-icon">
-        <div>
-          <div class="header-title">Capsule Hub</div>
-          <div class="header-subtitle">AI Context Bridge</div>
-        </div>
+    <header class="header">
+      <div class="logo">
+        <img src="icon48.png" alt="" class="logo-icon">
+        <h1>Capsule Hub</h1>
       </div>
-      <div class="header-right">
-        <div class="status-badge" id="status-badge">
-          <span class="status-dot"></span>
-          <span id="status-text">Ready</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Privacy Banner -->
-    <div class="privacy-banner">
-      <span class="privacy-icon">🔒</span>
-      <span>100% local — your data never leaves your browser</span>
-    </div>
-
-    <!-- Tab Navigation -->
-    <div class="tabs">
-      <button class="tab active" data-tab="capture">
-        <span class="tab-icon">⚡</span>
-        <span>Capture</span>
-      </button>
-      <button class="tab" data-tab="library">
-        <span class="tab-icon">💊</span>
-        <span>Library</span>
-      </button>
-    </div>
+      <div class="privacy-badge">🔒 100% Local</div>
+    </header>
 
     <!-- Main Content -->
-    <div class="main">
-      <!-- Capture View -->
-      <div id="capture-view" class="view">
-        <!-- Empty State -->
-        <div id="empty-state" class="empty-state">
-          <div class="empty-icon">💬</div>
-          <div class="empty-title">No conversation detected</div>
-          <div class="empty-desc">Open a supported AI chat to automatically capture context</div>
-          <div class="provider-grid">
-            <a href="https://chatgpt.com" target="_blank" class="provider-card" data-provider="chatgpt">
-              <span class="provider-icon">🤖</span>
-              <span class="provider-name">ChatGPT</span>
-            </a>
-            <a href="https://claude.ai" target="_blank" class="provider-card" data-provider="claude">
-              <span class="provider-icon">🎨</span>
-              <span class="provider-name">Claude</span>
-            </a>
-            <a href="https://gemini.google.com" target="_blank" class="provider-card" data-provider="gemini">
-              <span class="provider-icon">✨</span>
-              <span class="provider-name">Gemini</span>
-            </a>
-            <a href="https://chat.deepseek.com" target="_blank" class="provider-card" data-provider="deepseek">
-              <span class="provider-icon">🐳</span>
-              <span class="provider-name">DeepSeek</span>
-            </a>
-          </div>
-        </div>
-
-        <!-- Captured State -->
-        <div id="captured-state" class="captured-state hidden">
-          <!-- Source Info -->
-          <div class="source-card">
-            <div class="source-header">
-              <span class="source-badge" id="source-badge">AI Tool</span>
-              <span class="source-count" id="source-count">0 messages</span>
-            </div>
-          </div>
-
-          <!-- Messages -->
-          <div class="section">
-            <div class="section-header">
-              <span class="section-title">Conversation</span>
-              <div class="section-actions">
-                <button class="text-btn" id="btn-select-all">Select all</button>
-                <span class="divider">|</span>
-                <button class="text-btn" id="btn-select-last">Last turn</button>
-              </div>
-            </div>
-            <div class="messages-list" id="messages-list"></div>
-          </div>
-
-          <!-- Mode Selector -->
-          <div class="mode-selector">
-            <label class="mode-option active" data-mode="full">
-              <input type="radio" name="mode" value="full" checked>
-              <span class="mode-icon">📝</span>
-              <span class="mode-name">Full</span>
-            </label>
-            <label class="mode-option" data-mode="selective">
-              <input type="radio" name="mode" value="selective">
-              <span class="mode-icon">✂️</span>
-              <span class="mode-name">Selective</span>
-            </label>
-            <label class="mode-option" data-mode="summary">
-              <input type="radio" name="mode" value="summary">
-              <span class="mode-icon">⚡</span>
-              <span class="mode-name">Summary</span>
-            </label>
-          </div>
-
-          <!-- Token Counter -->
-          <div class="token-bar">
-            <span class="token-count" id="token-count">~0 tokens</span>
-            <span class="token-warn hidden" id="token-warn">⚠️ Large context</span>
-          </div>
-
-          <!-- Action Buttons -->
-          <div class="action-row">
-            <button class="btn btn-secondary" id="btn-copy">
-              <span>📋</span>
-              <span>Copy</span>
-            </button>
-            <button class="btn btn-accent" id="btn-save">
-              <span>💊</span>
-              <span>Save Capsule</span>
-            </button>
-          </div>
-
-          <!-- Bridge Section -->
-          <div class="section">
-            <div class="section-header">
-              <span class="section-title">Bridge to</span>
-            </div>
-            <div class="bridge-grid">
-              <button class="bridge-card" data-target="chatgpt" data-url="https://chatgpt.com">
-                <span class="bridge-icon">🤖</span>
-                <span class="bridge-name">ChatGPT</span>
-                <span class="bridge-arrow">→</span>
-              </button>
-              <button class="bridge-card" data-target="claude" data-url="https://claude.ai">
-                <span class="bridge-icon">🎨</span>
-                <span class="bridge-name">Claude</span>
-                <span class="bridge-arrow">→</span>
-              </button>
-              <button class="bridge-card" data-target="gemini" data-url="https://gemini.google.com">
-                <span class="bridge-icon">✨</span>
-                <span class="bridge-name">Gemini</span>
-                <span class="bridge-arrow">→</span>
-              </button>
-              <button class="bridge-card" data-target="deepseek" data-url="https://chat.deepseek.com">
-                <span class="bridge-icon">🐳</span>
-                <span class="bridge-name">DeepSeek</span>
-                <span class="bridge-arrow">→</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Clear Button -->
-          <button class="btn btn-ghost btn-full" id="btn-clear">
-            Clear Context
-          </button>
-        </div>
-
-        <!-- Manual Entry (Collapsible) -->
-        <details class="manual-section">
-          <summary class="manual-summary">
-            <span>✏️</span>
-            <span>Manual entry</span>
-            <span class="manual-arrow">▼</span>
-          </summary>
-          <div class="manual-content">
-            <textarea id="manual-text" placeholder="Paste your context here..."></textarea>
-            <button class="btn btn-primary btn-full" id="btn-manual">Load Context</button>
-          </div>
-        </details>
+    <main class="main">
+      <!-- Status Section -->
+      <div class="status-section" id="status-section">
+        <div class="status-icon">⚡</div>
+        <div class="status-text" id="status-text">Detecting conversation...</div>
       </div>
 
-      <!-- Library View -->
-      <div id="library-view" class="view hidden">
+      <!-- Action Buttons -->
+      <div class="action-section">
+        <button class="btn btn-primary btn-large" id="btn-save-capsule">
+          <span class="btn-icon">💊</span>
+          <span>Save Capsule</span>
+        </button>
+        
+        <button class="btn btn-secondary" id="btn-copy-context">
+          <span class="btn-icon">📋</span>
+          <span>Copy Context</span>
+        </button>
+      </div>
+
+      <!-- Capsule Library -->
+      <div class="library-section">
+        <div class="library-header">
+          <h2>Capsule Library</h2>
+          <span class="library-count" id="library-count">0 capsules</span>
+        </div>
+
         <!-- Search -->
         <div class="search-box">
           <span class="search-icon">🔍</span>
@@ -190,23 +52,37 @@
         </div>
 
         <!-- Capsule List -->
-        <div id="library-list" class="library-list"></div>
-
-        <!-- Empty State -->
-        <div id="library-empty" class="library-empty">
-          <div class="empty-icon">💊</div>
-          <div class="empty-title">No saved capsules</div>
-          <div class="empty-desc">Capture and save conversations to build your library</div>
+        <div class="capsule-list" id="capsule-list">
+          <div class="empty-state" id="empty-state">
+            <div class="empty-icon">📦</div>
+            <p>No capsules saved yet</p>
+            <p class="empty-hint">Save your first capsule to get started</p>
+          </div>
         </div>
       </div>
-    </div>
+
+      <!-- Manual Entry (Collapsible) -->
+      <details class="manual-section">
+        <summary class="manual-summary">
+          <span>✏️ Manual Entry</span>
+          <span class="manual-arrow">▼</span>
+        </summary>
+        <div class="manual-content">
+          <textarea id="manual-text" placeholder="Paste your context here..."></textarea>
+          <button class="btn btn-primary btn-full" id="btn-manual">Load Context</button>
+        </div>
+      </details>
+    </main>
 
     <!-- Footer -->
-    <div class="footer">
-      <span class="footer-text">Made with ❤️ for privacy</span>
-      <span class="footer-version">v1.2.0</span>
-    </div>
+    <footer class="footer">
+      <span class="footer-text">Context compression for AI workflows</span>
+      <span class="footer-version">v1.3.0</span>
+    </footer>
   </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast"></div>
 
   <script src="context-processor.js"></script>
   <script src="popup.js"></script>

@@ -1,214 +1,240 @@
-// Context Processor - Intelligent conversation analysis
-// 🔒 PRIVACY: All processing happens locally. No external API calls.
+// Capsule Hub - Intelligent Context Compressor
+// 🔒 All processing happens locally. Zero external calls.
 
 /**
- * Analyze conversation and extract meaningful insights
- * Uses semantic analysis, not just pattern matching
+ * Extract and compress conversation into a compact context capsule
+ * Goal: Capture the ESSENCE, not the raw text
  */
-function analyzeConversation(messages) {
+function createCapsule(messages, providerName) {
   if (!messages || messages.length === 0) {
-    return { goal: 'No conversation', progress: [], decisions: [], currentState: 'Empty' };
+    return null;
   }
 
-  // Extract all user and assistant messages
-  const userMessages = messages.filter(m => m.role === 'user').map(m => m.text);
-  const assistantMessages = messages.filter(m => m.role === 'assistant').map(m => m.text);
+  // 1. Extract core components
+  const goal = extractCoreGoal(messages);
+  const requirements = extractRequirements(messages);
+  const decisions = extractKeyDecisions(messages);
+  const progress = extractProgress(messages);
+  const codeBlocks = extractAllCodeBlocks(messages);
+  const currentState = extractCurrentState(messages);
+  const constraints = extractConstraints(messages);
 
-  // 1. GOAL EXTRACTION - Analyze entire conversation, not just first message
-  const goal = extractIntelligentGoal(userMessages, assistantMessages);
+  // 2. Generate intelligent name
+  const capsuleName = generateCapsuleName(goal, decisions, codeBlocks);
 
-  // 2. PROGRESS TRACKING - What was accomplished
-  const progress = trackProgress(assistantMessages);
-
-  // 3. KEY DECISIONS - Important choices made
-  const decisions = extractDecisions(messages);
-
-  // 4. CURRENT STATE - Where things stand now
-  const currentState = determineCurrentState(messages);
-
-  // 5. KEY CONCEPTS - Main topics/technologies discussed
-  const concepts = extractKeyConcepts(messages);
+  // 3. Compress into structured capsule
+  const capsuleText = compressToCapsule({
+    goal,
+    requirements,
+    decisions,
+    progress,
+    codeBlocks,
+    currentState,
+    constraints,
+    providerName,
+    messageCount: messages.length
+  });
 
   return {
-    goal,
-    progress,
-    decisions,
-    currentState,
-    concepts,
-    messageCount: messages.length,
-    userMessageCount: userMessages.length,
-    assistantMessageCount: assistantMessages.length
+    name: capsuleName,
+    text: capsuleText,
+    metadata: {
+      goal,
+      messageCount: messages.length,
+      codeBlockCount: codeBlocks.length,
+      timestamp: Date.now(),
+      provider: providerName
+    }
   };
 }
 
 /**
- * Intelligent goal extraction - analyzes entire conversation
+ * Extract the CORE goal - what user is actually trying to achieve
  */
-function extractIntelligentGoal(userMessages, assistantMessages) {
-  if (userMessages.length === 0) return 'No goal identified';
+function extractCoreGoal(messages) {
+  const userMsgs = messages.filter(m => m.role === 'user').map(m => m.text);
+  
+  if (userMsgs.length === 0) return 'No goal identified';
 
-  // Strategy 1: Look for explicit goal statements in early messages
+  // Analyze ALL user messages to understand the true objective
+  const allUserText = userMsgs.join(' ').toLowerCase();
+  
+  // Look for explicit goal statements
   const goalPatterns = [
     /(?:i (?:want|need|'d like) (?:to|you to))\s+(.+?)(?:\.|$)/i,
     /(?:help me|please)\s+(.+?)(?:\.|$)/i,
-    /(?:can you|could you)\s+(.+?)(?:\?|$)/i,
-    /(?:let's|we should)\s+(.+?)(?:\.|$)/i,
-    /(?:build|create|make|develop|implement|design)\s+(?:a|an|the)?\s*(.+?)(?:\.|$)/i
+    /(?:build|create|make|develop|implement|design)\s+(?:a|an|the)?\s*(.+?)(?:\.|$)/i,
+    /(?:can you|could you)\s+(.+?)(?:\?|$)/i
   ];
 
-  // Check first 3 user messages for explicit goals
-  for (let i = 0; i < Math.min(3, userMessages.length); i++) {
-    const msg = userMessages[i];
+  // Check first 5 user messages (not just first)
+  for (let i = 0; i < Math.min(5, userMsgs.length); i++) {
     for (const pattern of goalPatterns) {
-      const match = msg.match(pattern);
-      if (match && match[1] && match[1].length > 10) {
+      const match = userMsgs[i].match(pattern);
+      if (match && match[1] && match[1].length > 10 && match[1].length < 200) {
         let goal = match[1].trim();
         goal = goal.replace(/[?.!]+$/, '');
-        goal = goal.charAt(0).toUpperCase() + goal.slice(1);
-        return goal;
+        return goal.charAt(0).toUpperCase() + goal.slice(1);
       }
     }
   }
 
-  // Strategy 2: Analyze what the assistant actually did (from their responses)
-  const assistantActions = [];
-  const actionPatterns = [
-    /(?:i(?:'ve| have) (?:created|built|implemented|written|developed))\s+(.+?)(?:\.|$)/i,
-    /(?:here(?:'s| is) (?:the|a|your))\s+(.+?)(?:\.|$)/i,
-    /(?:let me (?:show|explain|create|build))\s+(.+?)(?:\.|$)/i
-  ];
-
-  for (const msg of assistantMessages.slice(0, 3)) {
-    for (const pattern of actionPatterns) {
-      const match = msg.match(pattern);
-      if (match && match[1]) {
-        assistantActions.push(match[1].trim());
-      }
-    }
-  }
-
-  if (assistantActions.length > 0) {
-    // Infer goal from what was delivered
-    return assistantActions[0].charAt(0).toUpperCase() + assistantActions[0].slice(1);
-  }
-
-  // Strategy 3: Extract key topics from conversation
-  const allText = [...userMessages, ...assistantMessages].join(' ').toLowerCase();
-  const topics = extractTopics(allText);
-  
+  // Extract key topics from entire conversation
+  const topics = extractTopicsFromConversation(allUserText);
   if (topics.length > 0) {
-    return `Work on ${topics.slice(0, 2).join(' and ')}`;
+    return topics.join(', ');
   }
 
-  // Fallback: Summarize first message intelligently
-  const firstMsg = userMessages[0];
-  const sentences = firstMsg.split(/[.!?]+/).filter(s => s.trim().length > 10);
+  // Fallback: Most substantial user message
+  const substantial = userMsgs
+    .filter(m => m.length > 20)
+    .sort((a, b) => b.length - a.length);
   
-  if (sentences.length > 0) {
-    // Take the most substantial sentence
-    const bestSentence = sentences.reduce((best, current) => 
-      current.length > best.length ? current : best
-    );
-    return bestSentence.trim().charAt(0).toUpperCase() + bestSentence.trim().slice(1);
+  if (substantial.length > 0) {
+    const msg = substantial[0];
+    const sentences = msg.split(/[.!?]+/).filter(s => s.trim().length > 15);
+    if (sentences.length > 0) {
+      return sentences[0].trim();
+    }
   }
 
-  return firstMsg.substring(0, 100).trim();
+  return 'Conversation context';
 }
 
 /**
- * Track what was accomplished in the conversation
+ * Extract user requirements and constraints
  */
-function trackProgress(assistantMessages) {
-  const progress = [];
-  const completed = [];
-  const pending = [];
-
-  // Completion indicators
-  const completionPatterns = [
-    { pattern: /(?:i(?:'ve| have) (?:created|built|implemented|added|fixed|completed|finished))/i, type: 'completed' },
-    { pattern: /(?:here(?:'s| is) (?:the|your|a))/i, type: 'completed' },
-    { pattern: /(?:done|completed|finished|ready)/i, type: 'completed' },
-    { pattern: /(?:the (?:code|function|component|file) (?:is|has been))/i, type: 'completed' }
+function extractRequirements(messages) {
+  const requirements = [];
+  const requirementPatterns = [
+    /(?:it (?:should|must|needs to|has to))\s+(.+?)(?:\.|$)/i,
+    /(?:make sure|ensure)\s+(.+?)(?:\.|$)/i,
+    /(?:i need|we need)\s+(.+?)(?:\.|$)/i,
+    /(?:requirement:|spec:)\s*(.+?)(?:\.|$)/i
   ];
 
-  // Pending indicators
-  const pendingPatterns = [
-    { pattern: /(?:you (?:can|could|should|might want to) (?:also|additionally|next))/i, type: 'pending' },
-    { pattern: /(?:still need to|todo|remaining|yet to)/i, type: 'pending' },
-    { pattern: /(?:next (?:step|we should|you should))/i, type: 'pending' }
-  ];
-
-  assistantMessages.forEach(msg => {
-    const sentences = msg.split(/[.!?]+/).filter(s => s.trim().length > 15);
-    
-    sentences.forEach(sentence => {
-      completionPatterns.forEach(({ pattern, type }) => {
-        if (pattern.test(sentence)) {
-          completed.push(sentence.trim());
-        }
+  messages.forEach(msg => {
+    if (msg.role === 'user') {
+      const sentences = msg.text.split(/[.!?]+/).filter(s => s.trim().length > 10);
+      sentences.forEach(sentence => {
+        requirementPatterns.forEach(pattern => {
+          const match = sentence.match(pattern);
+          if (match && match[1]) {
+            requirements.push(match[1].trim());
+          }
+        });
       });
-
-      pendingPatterns.forEach(({ pattern, type }) => {
-        if (pattern.test(sentence)) {
-          pending.push(sentence.trim());
-        }
-      });
-    });
+    }
   });
 
-  // Remove duplicates and limit
-  const uniqueCompleted = [...new Set(completed)].slice(0, 3);
-  const uniquePending = [...new Set(pending)].slice(0, 2);
-
-  return {
-    completed: uniqueCompleted,
-    pending: uniquePending,
-    total: uniqueCompleted.length + uniquePending.length
-  };
+  return [...new Set(requirements)].slice(0, 5);
 }
 
 /**
- * Extract key decisions made during conversation
+ * Extract key decisions made
  */
-function extractDecisions(messages) {
+function extractKeyDecisions(messages) {
   const decisions = [];
   const decisionPatterns = [
-    /(?:let's (?:go with|use|choose|implement))/i,
-    /(?:i(?:'ll| will) use)/i,
-    /(?:we(?:'ll| will) use)/i,
-    /(?:decided to|decision:|chosen)/i,
-    /(?:the best (?:approach|way|method) is)/i
+    /(?:let's (?:go with|use|choose|implement))\s+(.+?)(?:\.|$)/i,
+    /(?:i(?:'ll| will) use)\s+(.+?)(?:\.|$)/i,
+    /(?:we(?:'ll| will) use)\s+(.+?)(?:\.|$)/i,
+    /(?:decided to|decision:|chosen:?)\s*(.+?)(?:\.|$)/i,
+    /(?:the best (?:approach|way|method) is)\s+(.+?)(?:\.|$)/i
   ];
 
   messages.forEach(msg => {
     const sentences = msg.text.split(/[.!?]+/).filter(s => s.trim().length > 15);
-    
     sentences.forEach(sentence => {
       decisionPatterns.forEach(pattern => {
-        if (pattern.test(sentence)) {
-          decisions.push({
-            text: sentence.trim(),
-            role: msg.role
-          });
+        const match = sentence.match(pattern);
+        if (match && match[1] && match[1].length > 10) {
+          decisions.push(match[1].trim());
         }
       });
     });
   });
 
-  return decisions.slice(0, 3);
+  return [...new Set(decisions)].slice(0, 5);
 }
 
 /**
- * Determine current state of the conversation
+ * Extract what has been accomplished
  */
-function determineCurrentState(messages) {
-  if (messages.length === 0) return 'Empty conversation';
+function extractProgress(messages) {
+  const completed = [];
+  const pending = [];
+
+  const completedPatterns = [
+    /(?:i(?:'ve| have) (?:created|built|implemented|added|fixed|completed|finished|written))\s+(.+?)(?:\.|$)/i,
+    /(?:here(?:'s| is) (?:the|your|a))\s+(.+?)(?:\.|$)/i,
+    /(?:the (?:code|function|component|file) (?:is|has been))\s+(.+?)(?:\.|$)/i,
+    /(?:done[.!]|completed[.!]|finished[.!]|ready[.!])/i
+  ];
+
+  const pendingPatterns = [
+    /(?:you (?:can|could|should|might want to) (?:also|additionally|next))\s+(.+?)(?:\.|$)/i,
+    /(?:still need to|todo|remaining|yet to)\s+(.+?)(?:\.|$)/i,
+    /(?:next (?:step|we should|you should))\s+(.+?)(?:\.|$)/i
+  ];
+
+  messages.forEach(msg => {
+    if (msg.role === 'assistant') {
+      const sentences = msg.text.split(/[.!?]+/).filter(s => s.trim().length > 15);
+      sentences.forEach(sentence => {
+        completedPatterns.forEach(pattern => {
+          const match = sentence.match(pattern);
+          if (match && match[1]) {
+            completed.push(match[1].trim());
+          } else if (pattern.test(sentence) && !match) {
+            completed.push(sentence.trim());
+          }
+        });
+
+        pendingPatterns.forEach(pattern => {
+          const match = sentence.match(pattern);
+          if (match && match[1]) {
+            pending.push(match[1].trim());
+          }
+        });
+      });
+    }
+  });
+
+  return {
+    completed: [...new Set(completed)].slice(0, 5),
+    pending: [...new Set(pending)].slice(0, 3)
+  };
+}
+
+/**
+ * Extract ALL code blocks from entire conversation
+ */
+function extractAllCodeBlocks(messages) {
+  const codeBlocks = [];
+  const codeRegex = /```[\s\S]*?```/g;
+
+  messages.forEach(msg => {
+    let match;
+    while ((match = codeRegex.exec(msg.text)) !== null) {
+      codeBlocks.push({
+        code: match[0],
+        role: msg.role
+      });
+    }
+  });
+
+  return codeBlocks;
+}
+
+/**
+ * Extract current state of conversation
+ */
+function extractCurrentState(messages) {
+  if (messages.length === 0) return 'Empty';
 
   const lastMsg = messages[messages.length - 1];
-  const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
-  const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
-
-  // Check if conversation is complete
+  
   if (lastMsg.role === 'assistant') {
     const completionIndicators = [
       /(?:done|completed|finished|that's it|all set)/i,
@@ -218,260 +244,168 @@ function determineCurrentState(messages) {
 
     for (const pattern of completionIndicators) {
       if (pattern.test(lastMsg.text)) {
-        return 'Completed - Waiting for user feedback';
+        return 'Task completed, awaiting feedback';
       }
     }
 
-    return 'Assistant responded - Awaiting user input';
+    return 'Implementation provided, awaiting user review';
   }
 
-  // User sent last message
   if (lastMsg.role === 'user') {
-    const questionPatterns = [
-      /\?$/,
-      /(?:how|what|why|when|where|can you|could you)/i
-    ];
-
-    for (const pattern of questionPatterns) {
-      if (pattern.test(lastMsg.text)) {
-        return 'Question asked - Awaiting assistant response';
-      }
+    if (/\?/.test(lastMsg.text)) {
+      return 'Question asked, awaiting response';
     }
-
-    return 'User message sent - Awaiting assistant response';
+    return 'User input provided, awaiting response';
   }
 
   return 'In progress';
 }
 
 /**
- * Extract key concepts and topics from conversation
+ * Extract constraints and limitations mentioned
  */
-function extractKeyConcepts(messages) {
-  const allText = messages.map(m => m.text).join(' ').toLowerCase();
-  
-  // Technology/framework keywords
+function extractConstraints(messages) {
+  const constraints = [];
+  const constraintPatterns = [
+    /(?:don't|do not|cannot|can't|shouldn't)\s+(.+?)(?:\.|$)/i,
+    /(?:limitation:|constraint:|restriction:)\s*(.+?)(?:\.|$)/i,
+    /(?:must not|avoid)\s+(.+?)(?:\.|$)/i
+  ];
+
+  messages.forEach(msg => {
+    const sentences = msg.text.split(/[.!?]+/).filter(s => s.trim().length > 10);
+    sentences.forEach(sentence => {
+      constraintPatterns.forEach(pattern => {
+        const match = sentence.match(pattern);
+        if (match && match[1]) {
+          constraints.push(match[1].trim());
+        }
+      });
+    });
+  });
+
+  return [...new Set(constraints)].slice(0, 3);
+}
+
+/**
+ * Extract topics from conversation
+ */
+function extractTopicsFromConversation(text) {
   const techKeywords = [
     'react', 'vue', 'angular', 'javascript', 'typescript', 'python', 'java',
     'node', 'express', 'django', 'flask', 'database', 'api', 'rest', 'graphql',
     'jwt', 'authentication', 'authorization', 'css', 'html', 'sql', 'mongodb',
-    'postgresql', 'docker', 'kubernetes', 'aws', 'azure', 'git'
+    'postgresql', 'docker', 'kubernetes', 'aws', 'git', 'neural network',
+    'machine learning', 'ai', 'deep learning', 'algorithm'
   ];
 
-  // Concept keywords
-  const conceptKeywords = [
-    'algorithm', 'function', 'component', 'class', 'module', 'library',
-    'framework', 'pattern', 'architecture', 'design', 'implementation',
-    'feature', 'bug', 'error', 'optimization', 'performance', 'security'
-  ];
-
-  const foundTech = techKeywords.filter(kw => allText.includes(kw));
-  const foundConcepts = conceptKeywords.filter(kw => allText.includes(kw));
-
-  return {
-    technologies: foundTech.slice(0, 5),
-    concepts: foundConcepts.slice(0, 3)
-  };
+  const found = techKeywords.filter(kw => text.includes(kw));
+  return found.slice(0, 3);
 }
 
 /**
- * Extract topics from text
+ * Generate intelligent capsule name
  */
-function extractTopics(text) {
-  const topics = [];
-  const topicPatterns = [
-    /(?:the|a|an)\s+(\w+(?:\s+\w+)?)\s+(?:system|app|application|website|feature|component)/gi,
-    /(\w+(?:\s+\w+)?)\s+(?:development|implementation|integration)/gi
-  ];
-
-  topicPatterns.forEach(pattern => {
-    let match;
-    while ((match = pattern.exec(text)) !== null) {
-      if (match[1] && match[1].length > 3) {
-        topics.push(match[1]);
-      }
+function generateCapsuleName(goal, decisions, codeBlocks) {
+  // Strategy 1: Use goal if it's concise and meaningful
+  if (goal && goal.length > 10 && goal.length < 80) {
+    // Clean up the goal for use as name
+    let name = goal
+      .replace(/^(to |build |create |make |implement )/i, '')
+      .replace(/[.!?]+$/, '')
+      .trim();
+    
+    if (name.length > 50) {
+      name = name.substring(0, 47) + '...';
     }
-  });
-
-  return [...new Set(topics)].slice(0, 3);
-}
-
-/**
- * Remove filler phrases from text
- */
-function removeFiller(text) {
-  const fillerPatterns = [
-    /^(?:Sure!|Of course!|Absolutely!|Great question!|That's a great question!|I'd be happy to help[.!]?|Certainly!|No problem!|Happy to help[.!]?)\s*/i,
-    /(?:I hope this helps[.!]?|Let me know if you have any (?:other )?questions[.!]?|Feel free to ask if you need anything else[.!]?|Is there anything else I can help you with\??)\s*$/i,
-    /\s*(?:Here's|Here is|Let me|Allow me to)\s+/gi,
-    /^\s*(?:As an AI|As a language model)[^.]*(?:\.|,)\s*/i
-  ];
-
-  let cleaned = text;
-  fillerPatterns.forEach(pattern => {
-    cleaned = cleaned.replace(pattern, '');
-  });
-
-  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
-  return cleaned.trim();
-}
-
-/**
- * Isolate code blocks from text
- */
-function isolateCodeBlocks(text) {
-  const codeBlockRegex = /```[\s\S]*?```/g;
-  const codeBlocks = [];
-  
-  let match;
-  let index = 0;
-  while ((match = codeBlockRegex.exec(text)) !== null) {
-    codeBlocks.push({
-      index: index++,
-      code: match[0],
-      position: match.index
-    });
+    
+    return name.charAt(0).toUpperCase() + name.slice(1);
   }
 
-  let textWithoutCode = text;
-  codeBlocks.forEach((block, i) => {
-    const placeholder = `[CODE_BLOCK_${i}]`;
-    textWithoutCode = textWithoutCode.replace(block.code, placeholder);
-  });
+  // Strategy 2: Extract from decisions
+  if (decisions.length > 0) {
+    const decision = decisions[0];
+    let name = decision.substring(0, 50);
+    if (decision.length > 50) name += '...';
+    return name;
+  }
 
-  return { textWithoutCode, codeBlocks };
+  // Strategy 3: Use code context
+  if (codeBlocks.length > 0) {
+    return `Code Session (${codeBlocks.length} blocks)`;
+  }
+
+  // Fallback
+  return `Capsule ${new Date().toLocaleDateString()}`;
 }
 
 /**
- * Format output with intelligent analysis
+ * Compress everything into a compact capsule format
  */
-function formatSectionedOutput(messages, providerName, options = {}) {
-  const { includeHeader = true, mode = 'full' } = options;
-
-  // Analyze the conversation
-  const analysis = analyzeConversation(messages);
-
-  let output = '';
+function compressToCapsule(data) {
+  let capsule = '';
 
   // Header
-  if (includeHeader) {
-    output += `[CONTEXT TRANSFER FROM ${providerName.toUpperCase()}]\n\n`;
-    output += `Intelligent context analysis complete. Continue this conversation seamlessly.\n\n`;
-    output += `${'─'.repeat(50)}\n\n`;
-  }
+  capsule += `[CONTEXT CAPSULE from ${data.providerName}]\n`;
+  capsule += `[${data.messageCount} messages compressed]\n\n`;
 
-  // Section 1: Goal
-  output += `🎯 GOAL:\n${analysis.goal}\n\n`;
+  // Goal
+  capsule += `## OBJECTIVE\n${data.goal}\n\n`;
 
-  // Section 2: Progress
-  if (analysis.progress.total > 0) {
-    output += `📊 PROGRESS:\n`;
-    if (analysis.progress.completed.length > 0) {
-      analysis.progress.completed.forEach(item => {
-        output += `✅ ${item}\n`;
-      });
-    }
-    if (analysis.progress.pending.length > 0) {
-      analysis.progress.pending.forEach(item => {
-        output += `⏳ ${item}\n`;
-      });
-    }
-    output += '\n';
-  }
-
-  // Section 3: Key Concepts
-  if (analysis.concepts.technologies.length > 0 || analysis.concepts.concepts.length > 0) {
-    output += `💡 KEY CONCEPTS:\n`;
-    if (analysis.concepts.technologies.length > 0) {
-      output += `Technologies: ${analysis.concepts.technologies.join(', ')}\n`;
-    }
-    if (analysis.concepts.concepts.length > 0) {
-      output += `Concepts: ${analysis.concepts.concepts.join(', ')}\n`;
-    }
-    output += '\n';
-  }
-
-  // Section 4: Decisions
-  if (analysis.decisions.length > 0) {
-    output += `🔑 KEY DECISIONS:\n`;
-    analysis.decisions.forEach(decision => {
-      output += `• ${decision.text}\n`;
+  // Requirements (if any)
+  if (data.requirements.length > 0) {
+    capsule += `## REQUIREMENTS\n`;
+    data.requirements.forEach(req => {
+      capsule += `- ${req}\n`;
     });
-    output += '\n';
+    capsule += '\n';
   }
 
-  // Section 5: Current State
-  output += `📍 CURRENT STATE:\n${analysis.currentState}\n\n`;
-
-  // Section 6: Conversation (processed)
-  output += `💬 CONVERSATION:\n`;
-  
-  const processedMessages = messages.map(msg => {
-    let text = msg.role === 'assistant' ? removeFiller(msg.text) : msg.text;
-    const { textWithoutCode, codeBlocks } = isolateCodeBlocks(text);
-    
-    return {
-      role: msg.role,
-      text: textWithoutCode,
-      codeBlocks,
-      originalLength: msg.text.length
-    };
-  });
-
-  if (mode === 'summary') {
-    // Summary mode: key exchanges only
-    const firstUser = processedMessages.find(m => m.role === 'user');
-    const lastMsg = processedMessages[processedMessages.length - 1];
-    
-    if (firstUser) {
-      output += `[User]: ${firstUser.text.substring(0, 200)}${firstUser.text.length > 200 ? '...' : ''}\n\n`;
-    }
-    
-    // Show 2-3 key exchanges
-    const exchanges = [];
-    for (let i = 0; i < processedMessages.length - 1; i++) {
-      if (processedMessages[i].role === 'user' && processedMessages[i + 1].role === 'assistant') {
-        exchanges.push([processedMessages[i], processedMessages[i + 1]]);
-      }
-    }
-    
-    const keyExchanges = exchanges.slice(0, 2);
-    keyExchanges.forEach(([user, assistant]) => {
-      output += `[User]: ${user.text.substring(0, 150)}...\n`;
-      output += `[AI]: ${assistant.text.substring(0, 200)}...\n\n`;
+  // Decisions (if any)
+  if (data.decisions.length > 0) {
+    capsule += `## KEY DECISIONS\n`;
+    data.decisions.forEach(dec => {
+      capsule += `- ${dec}\n`;
     });
-    
-    if (lastMsg && lastMsg !== firstUser) {
-      output += `[${lastMsg.role === 'user' ? 'User' : 'AI'}]: ${lastMsg.text.substring(0, 200)}${lastMsg.text.length > 200 ? '...' : ''}\n\n`;
-    }
-  } else {
-    // Full mode: all messages
-    processedMessages.forEach(msg => {
-      const sender = msg.role === 'user' ? 'User' : 'AI Assistant';
-      output += `[${sender}]:\n${msg.text}\n\n`;
-      
-      if (msg.codeBlocks.length > 0) {
-        msg.codeBlocks.forEach(block => {
-          output += `${block.code}\n\n`;
-        });
-      }
-    });
+    capsule += '\n';
   }
 
-  // Section 7: Code Summary
-  const allCodeBlocks = processedMessages.flatMap(m => m.codeBlocks);
-  if (allCodeBlocks.length > 0) {
-    output += `💻 CODE BLOCKS (${allCodeBlocks.length} total):\n`;
-    output += `All code blocks preserved exactly as written.\n\n`;
+  // Progress
+  if (data.progress.completed.length > 0 || data.progress.pending.length > 0) {
+    capsule += `## PROGRESS\n`;
+    data.progress.completed.forEach(item => {
+      capsule += `✅ ${item}\n`;
+    });
+    data.progress.pending.forEach(item => {
+      capsule += `⏳ ${item}\n`;
+    });
+    capsule += '\n';
+  }
+
+  // Constraints (if any)
+  if (data.constraints.length > 0) {
+    capsule += `## CONSTRAINTS\n`;
+    data.constraints.forEach(con => {
+      capsule += `- ${con}\n`;
+    });
+    capsule += '\n';
+  }
+
+  // Current State
+  capsule += `## CURRENT STATE\n${data.currentState}\n\n`;
+
+  // Code Blocks
+  if (data.codeBlocks.length > 0) {
+    capsule += `## CODE (${data.codeBlocks.length} blocks)\n`;
+    data.codeBlocks.forEach((block, i) => {
+      capsule += `${block.code}\n\n`;
+    });
   }
 
   // Footer
-  if (includeHeader) {
-    output += `${'─'.repeat(50)}\n\n`;
-    output += `[END OF CONTEXT - Please confirm understanding and continue from the current state.]`;
-  }
+  capsule += `\n[END CAPSULE - Continue from current state]`;
 
-  return output;
+  return capsule;
 }
 
 /**
@@ -479,20 +413,17 @@ function formatSectionedOutput(messages, providerName, options = {}) {
  */
 function searchCapsules(capsules, query) {
   if (!query || query.trim() === '') return capsules;
-
   const searchTerm = query.toLowerCase();
   
   return capsules.filter(capsule => {
-    if (capsule.title && capsule.title.toLowerCase().includes(searchTerm)) return true;
+    if (capsule.name && capsule.name.toLowerCase().includes(searchTerm)) return true;
     if (capsule.text && capsule.text.toLowerCase().includes(searchTerm)) return true;
-    if (capsule.provider && capsule.provider.toLowerCase().includes(searchTerm)) return true;
     return false;
   });
 }
 
 // Export for browser
 if (typeof window !== 'undefined') {
-  window.analyzeConversation = analyzeConversation;
-  window.formatSectionedOutput = formatSectionedOutput;
+  window.createCapsule = createCapsule;
   window.searchCapsules = searchCapsules;
 }
