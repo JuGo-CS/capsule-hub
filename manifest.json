@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Capsule Hub - AI Context Bridge",
-  "version": "1.0.0",
-  "description": "Capture conversation context from one AI and continue in another instantly.",
+  "version": "1.2.0",
+  "description": "Capture conversation context from one AI and continue in another instantly. 100% local, privacy-first, open-source.",
   "icons": {
     "16": "icon16.png",
     "48": "icon48.png",
@@ -11,10 +11,13 @@
   "permissions": [
     "activeTab",
     "storage",
-    "tabs"
+    "tabs",
+    "clipboardWrite",
+    "scripting"
   ],
   "host_permissions": [
     "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
     "https://claude.ai/*",
     "https://gemini.google.com/*",
     "https://chat.deepseek.com/*",
@@ -33,6 +36,7 @@
     {
       "matches": [
         "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
         "https://claude.ai/*",
         "https://gemini.google.com/*",
         "https://chat.deepseek.com/*",
@@ -47,4 +51,3 @@
     "service_worker": "background.js"
   }
 }
-

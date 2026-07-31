@@ -7,151 +7,195 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div class="app-container">
+  <div class="app">
     <!-- Header -->
-    <header>
-      <div class="logo-area">
-        <img src="icon.svg" alt="Capsule Hub Logo" class="header-logo">
-        <div class="logo-text">
-          <h1>Capsule Hub</h1>
-          <span class="tagline">AI Context Bridge</span>
+    <div class="header">
+      <div class="header-left">
+        <img src="icon48.png" alt="" class="header-icon">
+        <div>
+          <div class="header-title">Capsule Hub</div>
+          <div class="header-subtitle">AI Context Bridge</div>
         </div>
       </div>
-      <div id="connection-status" class="status-pill status-idle">
-        <span class="pulse-dot"></span>
-        <span id="status-text">Detecting page...</span>
+      <div class="header-right">
+        <div class="status-badge" id="status-badge">
+          <span class="status-dot"></span>
+          <span id="status-text">Ready</span>
+        </div>
       </div>
-    </header>
+    </div>
 
-    <!-- Main Content Area -->
-    <main>
-      <!-- Screen 1: No active session / Unsupported site -->
-      <section id="unsupported-view" class="view hidden">
-        <div class="welcome-card">
-          <div class="welcome-icon">⚡</div>
-          <h3>Bridge Your Conversations</h3>
-          <p>Open one of the supported AI chats to capture your conversation context automatically:</p>
-          <div class="provider-launchpad">
-            <a href="https://chatgpt.com" target="_blank" class="launch-btn chatgpt-theme">
-              <span class="launch-icon">🤖</span> ChatGPT
+    <!-- Privacy Banner -->
+    <div class="privacy-banner">
+      <span class="privacy-icon">🔒</span>
+      <span>100% local — your data never leaves your browser</span>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main">
+      <!-- Capture View -->
+      <div id="capture-view" class="view">
+        <!-- Empty State -->
+        <div id="empty-state" class="empty-state">
+          <div class="empty-icon">💬</div>
+          <div class="empty-title">No conversation detected</div>
+          <div class="empty-desc">Open a supported AI chat to automatically capture context</div>
+          <div class="provider-grid">
+            <a href="https://chatgpt.com" target="_blank" class="provider-card" data-provider="chatgpt">
+              <span class="provider-icon">🤖</span>
+              <span class="provider-name">ChatGPT</span>
             </a>
-            <a href="https://claude.ai" target="_blank" class="launch-btn claude-theme">
-              <span class="launch-icon">🎨</span> Claude
+            <a href="https://claude.ai" target="_blank" class="provider-card" data-provider="claude">
+              <span class="provider-icon">🎨</span>
+              <span class="provider-name">Claude</span>
             </a>
-            <a href="https://gemini.google.com" target="_blank" class="launch-btn gemini-theme">
-              <span class="launch-icon">✨</span> Gemini
+            <a href="https://gemini.google.com" target="_blank" class="provider-card" data-provider="gemini">
+              <span class="provider-icon">✨</span>
+              <span class="provider-name">Gemini</span>
             </a>
-            <a href="https://chat.deepseek.com" target="_blank" class="launch-btn deepseek-theme">
-              <span class="launch-icon">🐳</span> DeepSeek
+            <a href="https://chat.deepseek.com" target="_blank" class="provider-card" data-provider="deepseek">
+              <span class="provider-icon">🐳</span>
+              <span class="provider-name">DeepSeek</span>
             </a>
           </div>
-          <div class="divider"><span>or</span></div>
-          <div class="manual-entry">
-            <label for="manual-text">Paste text manually to bridge:</label>
-            <textarea id="manual-text" placeholder="Paste custom context or prompts here..."></textarea>
-            <button id="manual-bridge-btn" class="action-btn primary-glow-btn">
-              Prepare Manual Context
+        </div>
+
+        <!-- Captured State -->
+        <div id="captured-state" class="captured-state hidden">
+          <!-- Source Info -->
+          <div class="source-card">
+            <div class="source-header">
+              <span class="source-badge" id="source-badge">AI Tool</span>
+              <span class="source-count" id="source-count">0 messages</span>
+            </div>
+          </div>
+
+          <!-- Messages -->
+          <div class="section">
+            <div class="section-header">
+              <span class="section-title">Conversation</span>
+              <div class="section-actions">
+                <button class="text-btn" id="btn-select-all">Select all</button>
+                <span class="divider">|</span>
+                <button class="text-btn" id="btn-select-last">Last turn</button>
+              </div>
+            </div>
+            <div class="messages-list" id="messages-list"></div>
+          </div>
+
+          <!-- Mode Selector -->
+          <div class="mode-selector">
+            <label class="mode-option active" data-mode="full">
+              <input type="radio" name="mode" value="full" checked>
+              <span class="mode-icon">📝</span>
+              <span class="mode-name">Full</span>
+            </label>
+            <label class="mode-option" data-mode="selective">
+              <input type="radio" name="mode" value="selective">
+              <span class="mode-icon">✂️</span>
+              <span class="mode-name">Selective</span>
+            </label>
+            <label class="mode-option" data-mode="summary">
+              <input type="radio" name="mode" value="summary">
+              <span class="mode-icon">⚡</span>
+              <span class="mode-name">Summary</span>
+            </label>
+          </div>
+
+          <!-- Token Counter -->
+          <div class="token-bar">
+            <span class="token-count" id="token-count">~0 tokens</span>
+            <span class="token-warn hidden" id="token-warn">⚠️ Large context</span>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="action-row">
+            <button class="btn btn-secondary" id="btn-copy">
+              <span>📋</span>
+              <span>Copy</span>
+            </button>
+            <button class="btn btn-accent" id="btn-save">
+              <span>💊</span>
+              <span>Save Capsule</span>
             </button>
           </div>
-        </div>
-      </section>
 
-      <!-- Screen 2: Context Captured -->
-      <section id="captured-view" class="view">
-        <!-- Source Details -->
-        <div class="source-info-bar">
-          <span class="info-label">Captured from:</span>
-          <span id="source-badge" class="source-badge">AI Tool</span>
-          <span id="message-count-badge" class="count-badge">0 turns</span>
-        </div>
-
-        <!-- Scrollable Messages List -->
-        <div class="section-title">
-          <span>Select turns to bridge</span>
-          <div class="title-actions">
-            <button id="select-all-btn" class="text-link-btn">Select All</button>
-            <span class="sep">|</span>
-            <button id="select-last-btn" class="text-link-btn">Last Turn Only</button>
+          <!-- Bridge Section -->
+          <div class="section">
+            <div class="section-header">
+              <span class="section-title">Bridge to</span>
+            </div>
+            <div class="bridge-grid">
+              <button class="bridge-card" data-target="chatgpt" data-url="https://chatgpt.com">
+                <span class="bridge-icon">🤖</span>
+                <span class="bridge-name">ChatGPT</span>
+                <span class="bridge-arrow">→</span>
+              </button>
+              <button class="bridge-card" data-target="claude" data-url="https://claude.ai">
+                <span class="bridge-icon">🎨</span>
+                <span class="bridge-name">Claude</span>
+                <span class="bridge-arrow">→</span>
+              </button>
+              <button class="bridge-card" data-target="gemini" data-url="https://gemini.google.com">
+                <span class="bridge-icon">✨</span>
+                <span class="bridge-name">Gemini</span>
+                <span class="bridge-arrow">→</span>
+              </button>
+              <button class="bridge-card" data-target="deepseek" data-url="https://chat.deepseek.com">
+                <span class="bridge-icon">🐳</span>
+                <span class="bridge-name">DeepSeek</span>
+                <span class="bridge-arrow">→</span>
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div id="messages-list" class="messages-scroll-container">
-          <!-- Populated programmatically -->
-        </div>
-
-        <!-- Context Mode Selector -->
-        <div class="mode-selector">
-          <div class="mode-group">
-            <input type="radio" id="mode-full" name="context-mode" value="full" checked>
-            <label for="mode-full" class="mode-label">Full Context</label>
-          </div>
-          <div class="mode-group">
-            <input type="radio" id="mode-selective" name="context-mode" value="selective">
-            <label for="mode-selective" class="mode-label">Selective</label>
-          </div>
-          <div class="mode-group">
-            <input type="radio" id="mode-summary" name="context-mode" value="summary">
-            <label for="mode-summary" class="mode-label">Summary</label>
-          </div>
-        </div>
-
-        <!-- Token Counter -->
-        <div class="token-counter">
-          <span id="token-count">0 tokens</span>
-          <span class="token-warning" id="token-warning">⚠️ High token usage</span>
-        </div>
-
-        <!-- Format Options -->
-        <div class="options-container">
-          <label class="switch-container">
-            <input type="checkbox" id="add-summary-prompt" checked>
-            <span class="slider"></span>
-            <span class="switch-label">Include bridge header instruction</span>
-          </label>
-        </div>
-
-        <!-- Target Destination Selection -->
-        <div class="destination-section">
-          <h3>Continue this conversation in:</h3>
-          <div class="target-grid">
-            <button class="target-btn chatgpt-btn" data-target="chatgpt" data-url="https://chatgpt.com">
-              <span class="target-logo">💬</span>
-              <span class="target-name">ChatGPT</span>
-            </button>
-            <button class="target-btn claude-btn" data-target="claude" data-url="https://claude.ai">
-              <span class="target-logo">🎭</span>
-              <span class="target-name">Claude</span>
-            </button>
-            <button class="target-btn gemini-btn" data-target="gemini" data-url="https://gemini.google.com">
-              <span class="target-logo">✨</span>
-              <span class="target-name">Gemini</span>
-            </button>
-            <button class="target-btn deepseek-btn" data-target="deepseek" data-url="https://chat.deepseek.com">
-              <span class="target-logo">🐳</span>
-              <span class="target-name">DeepSeek</span>
-            </button>
-          </div>
-        </div>
-
-        
-        <!-- Secondary Actions -->
-        <div class="popup-actions">
-          <button id="copy-clipboard-btn" class="action-btn secondary-btn">
-            <span class="btn-icon">📋</span> Copy Raw Context
-          </button>
-          <button id="clear-session-btn" class="action-btn text-btn">
+          <!-- Clear Button -->
+          <button class="btn btn-ghost btn-full" id="btn-clear">
             Clear Context
           </button>
         </div>
-      </section>
-    </main>
+
+        <!-- Manual Entry (Collapsible) -->
+        <details class="manual-section">
+          <summary class="manual-summary">
+            <span>✏️</span>
+            <span>Manual entry</span>
+            <span class="manual-arrow">▼</span>
+          </summary>
+          <div class="manual-content">
+            <textarea id="manual-text" placeholder="Paste your context here..."></textarea>
+            <button class="btn btn-primary btn-full" id="btn-manual">Load Context</button>
+          </div>
+        </details>
+      </div>
+
+      <!-- Library View -->
+      <div id="library-view" class="view hidden">
+        <!-- Search -->
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="search-input" placeholder="Search capsules...">
+        </div>
+
+        <!-- Capsule List -->
+        <div id="library-list" class="library-list"></div>
+
+        <!-- Empty State -->
+        <div id="library-empty" class="library-empty">
+          <div class="empty-icon">💊</div>
+          <div class="empty-title">No saved capsules</div>
+          <div class="empty-desc">Capture and save conversations to build your library</div>
+        </div>
+      </div>
+    </div>
 
     <!-- Footer -->
-    <footer>
-      <div id="footer-message">Ready to bridge context</div>
-      <div class="version-label">v1.0.0</div>
-    </footer>
+    <div class="footer">
+      <span class="footer-text">Made with ❤️ for privacy</span>
+      <span class="footer-version">v1.2.0</span>
+    </div>
   </div>
+
   <script src="popup.js"></script>
 </body>
 </html>

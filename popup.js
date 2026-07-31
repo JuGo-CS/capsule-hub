@@ -1,384 +1,547 @@
-// Popup logic for Capsule Hub
+// Capsule Hub - Popup Controller (Privacy-First)
+
 document.addEventListener("DOMContentLoaded", () => {
-  // Elements
-  const statusPill = document.getElementById("connection-status");
-  const statusText = document.getElementById("status-text");
+  // ═══════════════════════════════════════════════════════════════════
+  // State
+  // ═══════════════════════════════════════════════════════════════════
   
-  const unsupportedView = document.getElementById("unsupported-view");
-  const capturedView = document.getElementById("captured-view");
+  let extractedSession = null;
+  let selectedMode = "full";
+
+  // ═══════════════════════════════════════════════════════════════════
+  // DOM Elements
+  // ═══════════════════════════════════════════════════════════════════
   
-  const sourceBadge = document.getElementById("source-badge");
-  const messageCountBadge = document.getElementById("message-count-badge");
-  const messagesList = document.getElementById("messages-list");
+  const $ = (id) => document.getElementById(id);
   
-  const selectAllBtn = document.getElementById("select-all-btn");
-  const selectLastBtn = document.getElementById("select-last-btn");
-  const addSummaryPromptCheckbox = document.getElementById("add-summary-prompt");
-  const copyClipboardBtn = document.getElementById("copy-clipboard-btn");
-  const clearSessionBtn = document.getElementById("clear-session-btn");
-  const footerMessage = document.getElementById("footer-message");
+  const statusBadge = $("status-badge");
+  const statusText = $("status-text");
   
-  const manualText = document.getElementById("manual-text");
-  const manualBridgeBtn = document.getElementById("manual-bridge-btn");
-
-  // Context mode controls
-  const modeFull = document.getElementById("mode-full");
-  const modeSelective = document.getElementById("mode-selective");
-  const modeSummary = document.getElementById("mode-summary");
-  const tokenCount = document.getElementById("token-count");
-  const tokenWarning = document.getElementById("token-warning");
-
-  let extractedSession = null; // Stores currently loaded session { provider, providerName, messages }
-  let selectedMode = "full"; // Default mode
-
-  // Initial connection check
-  checkActiveTab();
-
-  // Button Event Listeners
-  selectAllBtn.addEventListener("click", () => toggleAllCheckboxes(true));
-  selectLastBtn.addEventListener("click", selectOnlyLastTurn);
-  copyClipboardBtn.addEventListener("click", copyContextToClipboard);
-  clearSessionBtn.addEventListener("click", clearCurrentSession);
+  const captureView = $("capture-view");
+  const libraryView = $("library-view");
   
-  manualBridgeBtn.addEventListener("click", handleManualBridge);
+  const emptyState = $("empty-state");
+  const capturedState = $("captured-state");
+  
+  const sourceBadge = $("source-badge");
+  const sourceCount = $("source-count");
+  const messagesList = $("messages-list");
+  
+  const btnSelectAll = $("btn-select-all");
+  const btnSelectLast = $("btn-select-last");
+  const btnCopy = $("btn-copy");
+  const btnSave = $("btn-save");
+  const btnClear = $("btn-clear");
+  const btnManual = $("btn-manual");
+  const manualText = $("manual-text");
+  
+  const tokenCount = $("token-count");
+  const tokenWarn = $("token-warn");
+  
+  const libraryList = $("library-list");
+  const libraryEmpty = $("library-empty");
+  const searchInput = $("search-input");
 
-  // Mode selection listeners
-  modeFull.addEventListener("change", () => {
-    selectedMode = "full";
-    updateTokenCounter();
-  });
-  modeSelective.addEventListener("change", () => {
-    selectedMode = "selective";
-    updateTokenCounter();
-  });
-  modeSummary.addEventListener("change", () => {
-    selectedMode = "summary";
-    updateTokenCounter();
-  });
+  // ═══════════════════════════════════════════════════════════════════
+  // Event Listeners
+  // ═══════════════════════════════════════════════════════════════════
 
-  // Set up Target Destination click handlers
-  document.querySelectorAll(".target-btn").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-      const targetBtn = e.currentTarget;
-      const targetAI = targetBtn.dataset.target;
-      const targetUrl = targetBtn.dataset.url;
-      bridgeToTarget(targetAI, targetUrl);
+  // Tab switching
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const view = tab.dataset.tab;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      
+      captureView.classList.toggle('hidden', view !== 'capture');
+      libraryView.classList.toggle('hidden', view !== 'library');
+      
+      if (view === 'library') loadCapsuleLibrary();
     });
   });
 
-  // Query the current active tab to detect context
+  // Mode selector
+  document.querySelectorAll('.mode-option').forEach(option => {
+    option.addEventListener('click', () => {
+      const mode = option.dataset.mode;
+      selectedMode = mode;
+      option.querySelector('input').checked = true;
+      
+      document.querySelectorAll('.mode-option').forEach(o => o.classList.remove('active'));
+      option.classList.add('active');
+      
+      updateTokenCount();
+    });
+  });
+
+  // Selection buttons
+  btnSelectAll.addEventListener("click", selectAll);
+  btnSelectLast.addEventListener("click", selectLastTurn);
+  
+  // Action buttons
+  btnCopy.addEventListener("click", copyToClipboard);
+  btnSave.addEventListener("click", saveCapsule);
+  btnClear.addEventListener("click", clearSession);
+  btnManual.addEventListener("click", handleManualBridge);
+  
+  // Bridge buttons
+  document.querySelectorAll(".bridge-card").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      const target = btn.dataset.target;
+      const url = btn.dataset.url;
+      bridgeToTarget(target, url);
+    });
+  });
+  
+  // Message checkbox changes
+  messagesList.addEventListener("change", (e) => {
+    if (e.target.classList.contains("message-checkbox")) {
+      updateTokenCount();
+    }
+  });
+  
+  // Search
+  searchInput.addEventListener("input", (e) => {
+    filterLibrary(e.target.value);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Initialization
+  // ═══════════════════════════════════════════════════════════════════
+
+  checkActiveTab();
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Functions
+  // ═══════════════════════════════════════════════════════════════════
+
   function checkActiveTab() {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (!tabs || tabs.length === 0) {
-        showStatus("No active tab detected", "idle");
-        showUnsupportedView();
+      if (!tabs?.length) {
+        showStatus("No active tab", false);
+        showEmptyState();
         return;
       }
 
       const activeTab = tabs[0];
+      const url = activeTab.url || "";
       
-      // Try to communicate with content script on active tab
+      if (!isSupportedUrl(url)) {
+        loadSavedSession();
+        return;
+      }
+
       chrome.tabs.sendMessage(activeTab.id, { action: "extractContext" }, (response) => {
-        // Handle runtime errors (e.g. content script not loaded on page)
         if (chrome.runtime.lastError || !response) {
-          console.log("Content script not active on current tab. Checking storage...");
-          // Content script not loaded, check if we have previously saved context in storage
-          loadSavedSessionOrShowWelcome();
+          chrome.scripting?.executeScript({
+            target: { tabId: activeTab.id },
+            files: ['content.js']
+          }).catch(() => {});
+          loadSavedSession();
           return;
         }
 
         if (response.success) {
-          console.log("Context successfully extracted:", response);
           extractedSession = response;
-          // Save this session to storage for persistence
           chrome.storage.local.set({ savedSession: response });
           displaySession(response);
-          showStatus("Context extracted!", "active");
+          showStatus("Captured", true);
         } else {
-          console.log("Failed to extract context from active tab:", response.error);
-          loadSavedSessionOrShowWelcome();
+          loadSavedSession();
         }
       });
     });
   }
 
-  // Load a previously saved session or show unsupported launchpad
-  function loadSavedSessionOrShowWelcome() {
+  function isSupportedUrl(url) {
+    const supported = ["chatgpt.com", "claude.ai", "gemini.google.com", "chat.deepseek.com", "chat.openai.com"];
+    return supported.some(domain => url.includes(domain));
+  }
+
+  function loadSavedSession() {
     chrome.storage.local.get("savedSession", (data) => {
-      if (data && data.savedSession) {
-        console.log("Loaded saved session from storage");
+      if (data?.savedSession) {
         extractedSession = data.savedSession;
         displaySession(extractedSession);
-        showStatus("Saved context loaded", "active");
+        showStatus("Loaded", true);
       } else {
-        showUnsupportedView();
-        showStatus("Launchpad", "idle");
+        showEmptyState();
       }
     });
   }
 
-  // Show status inside header pill
-  function showStatus(text, type) {
-    statusText.innerText = text;
-    statusPill.className = `status-pill status-${type}`;
+  function showEmptyState() {
+    emptyState.classList.remove("hidden");
+    capturedState.classList.add("hidden");
+    showStatus("Ready", false);
   }
 
-  // Render unsupported view
-  function showUnsupportedView() {
-    unsupportedView.classList.remove("hidden");
-    capturedView.classList.add("hidden");
+  function showStatus(text, active) {
+    statusText.textContent = text;
+    statusBadge.classList.toggle("active", active);
   }
 
-  // Render captured session view
   function displaySession(session) {
-    unsupportedView.classList.add("hidden");
-    capturedView.classList.remove("hidden");
+    emptyState.classList.add("hidden");
+    capturedState.classList.remove("hidden");
 
-    // Configure source badge classes
-    sourceBadge.innerText = session.providerName;
-    sourceBadge.className = `source-badge source-${session.provider}`;
-    
-    // Configure counts
-    const turnCount = session.messages.length;
-    messageCountBadge.innerText = `${turnCount} turn${turnCount === 1 ? '' : 's'} `;
+    sourceBadge.textContent = session.providerName || "AI";
+    sourceCount.textContent = `${session.messages.length} messages`;
 
-    // Populate message list
+    renderMessages(session.messages);
+    updateTokenCount();
+  }
+
+  function renderMessages(messages) {
     messagesList.innerHTML = "";
-    session.messages.forEach((msg, idx) => {
+    
+    messages.forEach((msg, idx) => {
       const item = document.createElement("div");
       item.className = "message-item";
       
-      const roleText = msg.role === "user" ? "User" : "AI";
-      const snippet = msg.text.substring(0, 200) + (msg.text.length > 200 ? "..." : "");
+      const roleText = msg.role === "user" ? "You" : "AI";
+      const hasCode = /```/.test(msg.text);
+      const snippet = msg.text.substring(0, 80) + (msg.text.length > 80 ? "..." : "");
 
       item.innerHTML = `
-        <div class="message-checkbox-wrapper">
-          <input type="checkbox" class="message-checkbox" data-idx="${idx}" checked>
-        </div>
-        <div class="message-body" data-idx="${idx}">
+        <input type="checkbox" class="message-checkbox" data-idx="${idx}" checked>
+        <div class="message-body">
           <div class="message-meta">
             <span class="role-badge role-${msg.role}">${roleText}</span>
+            ${hasCode ? '<span class="code-badge">&lt;/&gt; code</span>' : ''}
           </div>
           <p class="message-snippet">${escapeHtml(snippet)}</p>
         </div>
       `;
 
-      // Allow clicking the body to toggle selection
-      item.querySelector(".message-body").addEventListener("click", () => {
+      item.addEventListener("click", (e) => {
+        if (e.target.classList.contains("message-checkbox")) return;
         const checkbox = item.querySelector(".message-checkbox");
         checkbox.checked = !checkbox.checked;
-        updateTokenCounter();
+        updateTokenCount();
       });
 
       messagesList.appendChild(item);
     });
-
-    // Reset checkbox states based on mode
-    updateModeSelection();
-    updateTokenCounter();
   }
 
-  // Helper to escape HTML characters
-  function escapeHtml(text) {
-    return text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  }
-
-  // Select/deselect all checkboxes
-  function toggleAllCheckboxes(checked) {
-    document.querySelectorAll(".message-checkbox").forEach(box => {
-      box.checked = checked;
+  function selectAll() {
+    document.querySelectorAll(".message-checkbox").forEach(cb => {
+      cb.checked = true;
     });
-    updateTokenCounter();
+    updateTokenCount();
   }
 
-  // Select only the last conversation turn (User prompt + AI Response, or just latest user prompt)
-  function selectOnlyLastTurn() {
-    toggleAllCheckboxes(false);
+  function selectLastTurn() {
     const checkboxes = Array.from(document.querySelectorAll(".message-checkbox"));
-    if (checkboxes.length > 0) {
-      // Find the last user turn and select from there to the end
-      let lastUserIdx = checkboxes.length - 1;
-      for (let i = checkboxes.length - 1; i >= 0; i--) {
-        const idx = checkboxes[i].dataset.idx;
-        const msg = extractedSession.messages[idx];
-        if (msg.role === "user") {
-          lastUserIdx = i;
-          break;
-        }
-      }
-      
-      // Check from last user message onwards
-      for (let i = lastUserIdx; i < checkboxes.length; i++) {
-        checkboxes[i].checked = true;
+    checkboxes.forEach(cb => cb.checked = false);
+    
+    if (!checkboxes.length) return;
+    
+    let lastUserIdx = checkboxes.length - 1;
+    for (let i = checkboxes.length - 1; i >= 0; i--) {
+      const idx = parseInt(checkboxes[i].dataset.idx);
+      if (extractedSession.messages[idx]?.role === "user") {
+        lastUserIdx = i;
+        break;
       }
     }
-    updateTokenCounter();
-  }
-
-  // Update mode selection based on current mode
-  function updateModeSelection() {
-    // Reset all checkboxes if in full or summary mode
-    if (selectedMode === "full" || selectedMode === "summary") {
-      toggleAllCheckboxes(true);
-    } else if (selectedMode === "selective") {
-      // Keep existing selections for selective mode
-      // No action needed here as checkboxes are already set
-    }
-  }
-
-  // Estimate token count (simplified: ~4 chars per token)
-  function estimateTokenCount() {
-    if (!extractedSession || !extractedSession.messages) return 0;
-
-    let totalChars = 0;
-    const checkboxes = Array.from(document.querySelectorAll(".message-checkbox:checked"));
     
-    if (selectedMode === "full" || selectedMode === "summary") {
-      // Use all messages
-      extractedSession.messages.forEach(msg => {
-        totalChars += msg.text.length;
-      });
-    } else if (selectedMode === "selective") {
-      // Use only selected messages
-      checkboxes.forEach(box => {
-        const idx = parseInt(box.dataset.idx);
-        totalChars += extractedSession.messages[idx].text.length;
-      });
+    for (let i = lastUserIdx; i < checkboxes.length; i++) {
+      checkboxes[i].checked = true;
     }
-
-    // Estimate tokens (roughly 4 characters per token)
-    return Math.ceil(totalChars / 4);
-  }
-
-  // Update token counter and warning
-  function updateTokenCounter() {
-    const tokenCountEstimate = estimateTokenCount();
-    tokenCount.innerText = `${tokenCountEstimate} tokens`;
     
-    // Show warning if over 3000 tokens
-    if (tokenCountEstimate > 3000) {
-      tokenWarning.classList.add("show");
-    } else {
-      tokenWarning.classList.remove("show");
-    }
+    updateTokenCount();
   }
 
-  // Generate formatted context string based on selected turns
+  function updateTokenCount() {
+    const text = generateFormattedContext();
+    const count = Math.ceil(text.length / 4);
+    tokenCount.textContent = `~${count.toLocaleString()} tokens`;
+    tokenWarn.classList.toggle("hidden", count <= 3000);
+  }
+
   function generateFormattedContext() {
-    if (!extractedSession || !extractedSession.messages) return "";
+    if (!extractedSession?.messages) return "";
 
     let contextBody = "";
-    
-    if (selectedMode === "full") {
-      // Full context: use all messages
-      extractedSession.messages.forEach(msg => {
-        const sender = msg.role === "user" ? "User" : "AI Assistant";
-        contextBody += `\n[${sender}]:\n${msg.text}\n`;
-      });
-    } else if (selectedMode === "selective") {
-      // Selective mode: use only selected messages
-      const selectedCheckboxes = Array.from(document.querySelectorAll(".message-checkbox:checked"));
-      if (selectedCheckboxes.length === 0) return "";
-      
-      selectedCheckboxes.sort((a, b) => parseInt(a.dataset.idx) - parseInt(b.dataset.idx));
-      
-      selectedCheckboxes.forEach(box => {
+
+    if (selectedMode === "summary") {
+      contextBody = generateSummary();
+    } else {
+      const checkboxes = Array.from(document.querySelectorAll(".message-checkbox:checked"));
+      if (!checkboxes.length) return "";
+
+      checkboxes.sort((a, b) => parseInt(a.dataset.idx) - parseInt(b.dataset.idx));
+
+      checkboxes.forEach(box => {
         const idx = parseInt(box.dataset.idx);
         const msg = extractedSession.messages[idx];
+        if (!msg) return;
         const sender = msg.role === "user" ? "User" : "AI Assistant";
         contextBody += `\n[${sender}]:\n${msg.text}\n`;
       });
-    } else if (selectedMode === "summary") {
-      // Summary mode: generate a concise summary
-      contextBody = generateSummary();
     }
 
-    const includeHeader = addSummaryPromptCheckbox.checked;
-    if (includeHeader) {
-      const source = extractedSession.providerName;
-      return `[Context Transfer: The following conversation log was captured from ${source} via Capsule Hub. Please digest this context and continue the conversation seamlessly.]\n--------------------------------------------${contextBody}--------------------------------------------\n[End of Context. Please confirm you understand the context above and respond to the last User prompt if applicable, or ask how you can help next.]`;
-    }
-
-    return contextBody.trim();
+    const source = extractedSession.providerName || "an AI assistant";
+    return (
+      `[CONTEXT TRANSFER FROM ${source.toUpperCase()}]\n\n` +
+      `Continue this conversation seamlessly. The following is captured context:\n\n` +
+      `${'─'.repeat(50)}\n` +
+      `${contextBody}\n` +
+      `${'─'.repeat(50)}\n\n` +
+      `[END OF CONTEXT - Please confirm understanding and respond to the last user message.]`
+    );
   }
 
-  // Generate a summary of the conversation
   function generateSummary() {
-    if (!extractedSession || !extractedSession.messages) return "";
-    
-    // Extract key elements for summary
+    if (!extractedSession?.messages) return "";
     const messages = extractedSession.messages;
-    const summaryParts = [];
-    
-    // Always include the first message
-    if (messages.length > 0) {
-      const firstMsg = messages[0];
-      summaryParts.push(`Initial query: ${firstMsg.text.substring(0, 100)}${firstMsg.text.length > 100 ? "..." : ""}`);
+    const parts = [];
+
+    parts.push(`📋 CAPSULE SUMMARY — from ${extractedSession.providerName || "AI"}\n${'═'.repeat(50)}`);
+
+    const firstUserMsg = messages.find(m => m.role === "user");
+    if (firstUserMsg) {
+      parts.push(`\n🎯 GOAL:\n${firstUserMsg.text.substring(0, 300)}${firstUserMsg.text.length > 300 ? "..." : ""}`);
     }
-    
-    // Include the last message (most recent)
-    if (messages.length > 1) {
-      const lastMsg = messages[messages.length - 1];
-      summaryParts.push(`Final response: ${lastMsg.text.substring(0, 100)}${lastMsg.text.length > 100 ? "..." : ""}`);
-    }
-    
-    // Include key exchanges (user -> assistant pairs)
-    let userMsg = null;
-    for (let i = 0; i < messages.length; i++) {
-      if (messages[i].role === "user") {
-        userMsg = messages[i];
-      } else if (messages[i].role === "assistant" && userMsg) {
-        // Found a user-assistant pair
-        const userSnippet = userMsg.text.substring(0, 80);
-        const assistantSnippet = messages[i].text.substring(0, 120);
-        summaryParts.push(`Q: ${userSnippet}${userMsg.text.length > 80 ? "..." : ""}\nA: ${assistantSnippet}${messages[i].text.length > 120 ? "..." : ""}`);
-        userMsg = null;
+
+    const allCodeBlocks = [];
+    messages.forEach((msg, i) => {
+      const codeMatches = msg.text.match(/```[\s\S]*?```/g);
+      if (codeMatches) {
+        codeMatches.forEach(block => {
+          allCodeBlocks.push({ index: i, role: msg.role, code: block });
+        });
+      }
+    });
+
+    if (allCodeBlocks.length > 0) {
+      parts.push(`\n💻 CODE BLOCKS (${allCodeBlocks.length} found):`);
+      const recentBlocks = allCodeBlocks.slice(-3);
+      recentBlocks.forEach((block, i) => {
+        const trimmed = block.code.length > 200 ? block.code.substring(0, 200) + "\n... (truncated)" : block.code;
+        parts.push(`\n[Code Block ${i + 1} — from ${block.role}]:\n${trimmed}`);
+      });
+      if (allCodeBlocks.length > 3) {
+        parts.push(`\n... and ${allCodeBlocks.length - 3} more code blocks`);
       }
     }
-    
-    // Create a concise summary
-    return "Summary of conversation:\n" + summaryParts.join("\n\n");
+
+    const exchanges = [];
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i].role === "user" && i + 1 < messages.length && messages[i + 1].role === "assistant") {
+        exchanges.push({ user: messages[i], assistant: messages[i + 1], idx: i });
+      }
+    }
+
+    if (exchanges.length > 0) {
+      parts.push(`\n💬 KEY EXCHANGES (${exchanges.length} total):`);
+      const toShow = exchanges.slice(0, 2).concat(exchanges.slice(-2));
+      const shown = new Set();
+      toShow.forEach(ex => {
+        if (shown.has(ex.idx)) return;
+        shown.add(ex.idx);
+        const userSnippet = ex.user.text.substring(0, 120);
+        const aiSnippet = ex.assistant.text.substring(0, 180);
+        parts.push(`\n• User: ${userSnippet}${ex.user.text.length > 120 ? "..." : ""}\n  AI: ${aiSnippet}${ex.assistant.text.length > 180 ? "..." : ""}`);
+      });
+    }
+
+    if (messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      const role = lastMsg.role === "user" ? "Pending user request" : "Last AI response";
+      parts.push(`\n🏁 CURRENT STATE:\n[${role}]: ${lastMsg.text.substring(0, 300)}${lastMsg.text.length > 300 ? "..." : ""}`);
+    }
+
+    parts.push(`\n${'═'.repeat(50)}`);
+    return parts.join("\n");
   }
 
-  // Copy selected context to clipboard
-  function copyContextToClipboard() {
+  function copyToClipboard() {
     const text = generateFormattedContext();
     if (!text) {
-      showFooterMessage("No messages selected to copy!", "error");
+      showFooterMessage("No messages selected!", "error");
       return;
     }
 
     navigator.clipboard.writeText(text).then(() => {
-      showFooterMessage("Context copied to clipboard!", "success");
-      
-      // Pulse badge success
-      chrome.runtime.sendMessage({ action: "updateBadge", text: "✓", color: "#06b6d4" });
-      setTimeout(() => {
-        chrome.runtime.sendMessage({ action: "updateBadge", text: "" });
-      }, 2000);
-    }).catch(err => {
-      console.error("Clipboard copy failed:", err);
-      showFooterMessage("Failed to copy to clipboard.", "error");
+      showFooterMessage("✅ Copied to clipboard!", "success");
+    }).catch(() => {
+      showFooterMessage("❌ Failed to copy", "error");
     });
   }
 
-  // Clear current active/saved session
-  function clearCurrentSession() {
+  function saveCapsule() {
+    const text = generateFormattedContext();
+    if (!text) {
+      showFooterMessage("No messages selected!", "error");
+      return;
+    }
+
+    const capsule = {
+      id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
+      title: generateCapsuleTitle(),
+      provider: extractedSession.providerName || "Manual",
+      mode: selectedMode,
+      text: text,
+      messageCount: extractedSession.messages.length,
+      timestamp: Date.now(),
+      tokenEstimate: Math.ceil(text.length / 4)
+    };
+
+    chrome.storage.local.get("capsuleLibrary", (data) => {
+      const library = data?.capsuleLibrary || [];
+      library.unshift(capsule);
+      if (library.length > 50) library.length = 50;
+
+      chrome.storage.local.set({ capsuleLibrary: library }, () => {
+        showFooterMessage(`💊 Capsule saved! (${library.length} in library)`, "success");
+      });
+    });
+  }
+
+  function generateCapsuleTitle() {
+    if (!extractedSession?.messages?.length) return "Untitled Capsule";
+    const firstUser = extractedSession.messages.find(m => m.role === "user");
+    if (firstUser) {
+      const title = firstUser.text.substring(0, 50).replace(/\n/g, ' ').trim();
+      return title + (firstUser.text.length > 50 ? "..." : "");
+    }
+    return `Capsule from ${extractedSession.providerName}`;
+  }
+
+  function loadCapsuleLibrary() {
+    chrome.storage.local.get("capsuleLibrary", (data) => {
+      const library = data?.capsuleLibrary || [];
+      
+      if (library.length === 0) {
+        libraryList.innerHTML = "";
+        libraryEmpty.classList.remove("hidden");
+        return;
+      }
+
+      libraryEmpty.classList.add("hidden");
+      libraryList.innerHTML = "";
+
+      library.forEach((capsule, idx) => {
+        const item = document.createElement("div");
+        item.className = "library-item";
+        item.draggable = true;
+
+        const date = new Date(capsule.timestamp);
+        const dateStr = date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        item.innerHTML = `
+          <div class="library-item-header">
+            <span class="library-item-title">${escapeHtml(capsule.title)}</span>
+            <span class="library-item-provider">${escapeHtml(capsule.provider || "Manual")}</span>
+          </div>
+          <div class="library-item-meta">
+            <span>${capsule.messageCount} msgs</span>
+            <span>~${capsule.tokenEstimate?.toLocaleString() || '?'} tokens</span>
+            <span>${dateStr}</span>
+          </div>
+          <div class="library-item-actions">
+            <button class="lib-btn lib-btn-primary" data-idx="${idx}" data-action="use">Use</button>
+            <button class="lib-btn" data-idx="${idx}" data-action="copy">Copy</button>
+            <button class="lib-btn" data-idx="${idx}" data-action="delete">Delete</button>
+          </div>
+        `;
+
+        // Drag and drop
+        item.addEventListener("dragstart", (e) => {
+          e.dataTransfer.setData("text/plain", capsule.text);
+          e.dataTransfer.effectAllowed = "copy";
+          item.style.opacity = "0.5";
+        });
+
+        item.addEventListener("dragend", () => {
+          item.style.opacity = "1";
+        });
+
+        // Button actions
+        item.querySelectorAll(".lib-btn").forEach(btn => {
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const action = btn.dataset.action;
+            const idx = parseInt(btn.dataset.idx);
+
+            if (action === "use") useCapsule(idx);
+            else if (action === "copy") copyCapsule(idx);
+            else if (action === "delete") deleteCapsule(idx);
+          });
+        });
+
+        libraryList.appendChild(item);
+      });
+    });
+  }
+
+  function filterLibrary(query) {
+    const items = libraryList.querySelectorAll(".library-item");
+    query = query.toLowerCase();
+    
+    items.forEach(item => {
+      const title = item.querySelector(".library-item-title").textContent.toLowerCase();
+      const provider = item.querySelector(".library-item-provider").textContent.toLowerCase();
+      const match = title.includes(query) || provider.includes(query);
+      item.style.display = match ? "" : "none";
+    });
+  }
+
+  function useCapsule(idx) {
+    chrome.storage.local.get("capsuleLibrary", (data) => {
+      const capsule = data?.capsuleLibrary?.[idx];
+      if (!capsule) return;
+
+      extractedSession = {
+        provider: capsule.provider?.toLowerCase() || "manual",
+        providerName: capsule.provider || "Saved Capsule",
+        messages: [{ role: "user", text: capsule.text }],
+        timestamp: capsule.timestamp
+      };
+      
+      chrome.storage.local.set({ savedSession: extractedSession });
+      displaySession(extractedSession);
+      showStatus("Loaded", true);
+      
+      document.querySelector('.tab[data-tab="capture"]').click();
+      showFooterMessage("💊 Capsule loaded!", "success");
+    });
+  }
+
+  function copyCapsule(idx) {
+    chrome.storage.local.get("capsuleLibrary", (data) => {
+      const capsule = data?.capsuleLibrary?.[idx];
+      if (!capsule) return;
+      
+      navigator.clipboard.writeText(capsule.text).then(() => {
+        showFooterMessage("📋 Copied to clipboard!", "success");
+      });
+    });
+  }
+
+  function deleteCapsule(idx) {
+    chrome.storage.local.get("capsuleLibrary", (data) => {
+      const library = data?.capsuleLibrary || [];
+      library.splice(idx, 1);
+      
+      chrome.storage.local.set({ capsuleLibrary: library }, () => {
+        showFooterMessage("🗑️ Capsule deleted", "success");
+        loadCapsuleLibrary();
+      });
+    });
+  }
+
+  function clearSession() {
     extractedSession = null;
     chrome.storage.local.remove(["savedSession", "pendingContext"], () => {
-      showUnsupportedView();
-      showStatus("Session cleared", "idle");
-      showFooterMessage("Session cleared successfully");
-      chrome.runtime.sendMessage({ action: "updateBadge", text: "" });
+      showEmptyState();
+      showFooterMessage("🗑️ Session cleared", "success");
     });
   }
 
-  // Handle manual context bridging
   function handleManualBridge() {
     const text = manualText.value.trim();
     if (!text) {
@@ -390,75 +553,64 @@ document.addEventListener("DOMContentLoaded", () => {
       success: true,
       provider: "manual",
       providerName: "Manual Input",
-      messages: [{ role: "user", text: text }]
+      messages: [{ role: "user", text: text }],
+      timestamp: Date.now()
     };
 
     extractedSession = manualResponse;
     chrome.storage.local.set({ savedSession: manualResponse });
     displaySession(manualResponse);
-    showStatus("Manual context ready", "active");
-    showFooterMessage("Context loaded from manual entry!");
-    manualText.value = ""; // Clear input
+    showStatus("Loaded", true);
+    showFooterMessage("✅ Manual context loaded!", "success");
+    manualText.value = "";
   }
 
-  // Bridge the context into the target AI tool
   function bridgeToTarget(targetAI, url) {
     const text = generateFormattedContext();
     if (!text) {
-      showFooterMessage("Please select at least one message turn!", "error");
+      showFooterMessage("Please select at least one message!", "error");
       return;
     }
 
-    showFooterMessage(`Connecting to ${targetAI.toUpperCase()}...`);
+    showFooterMessage(`🚀 Bridging to ${targetAI}...`, "info");
 
-    // 1. Save pending context with timestamp
-    const pendingContext = {
-      targetAI: targetAI,
-      text: text,
-      timestamp: Date.now()
-    };
+    const pendingContext = { targetAI, text, timestamp: Date.now() };
 
-    chrome.storage.local.set({ pendingContext: pendingContext }, () => {
-      // 2. Request background service worker to open a new tab
+    chrome.storage.local.set({ pendingContext }, () => {
       chrome.runtime.sendMessage({
         action: "openTabAndInject",
-        url: url,
-        targetAI: targetAI
+        url,
+        targetAI
       }, (response) => {
-        if (response && response.success) {
-          showFooterMessage(`Bridged! Injecting context in target... 🚀`);
-          
-          // Flash badge to show bridge in progress
-          chrome.runtime.sendMessage({ action: "updateBadge", text: ">>", color: "#8b5cf6" });
-          
-          setTimeout(() => {
-            window.close(); // Close extension popup
-          }, 1000);
+        if (response?.success) {
+          showFooterMessage(`✅ Injecting in ${targetAI}...`, "success");
+          setTimeout(() => window.close(), 1200);
         } else {
-          showFooterMessage(`Failed to launch ${targetAI}. Copying instead...`, "error");
-          copyContextToClipboard();
+          showFooterMessage("❌ Failed. Copying to clipboard...", "error");
+          copyToClipboard();
         }
       });
     });
   }
 
-  // Helper to show temporary messages in the footer
   function showFooterMessage(text, type = "info") {
-    footerMessage.innerText = text;
+    const footer = document.querySelector(".footer-text");
+    const original = footer.textContent;
+    footer.textContent = text;
     
-    if (type === "error") {
-      footerMessage.style.color = "#f87171"; // Light red
-    } else if (type === "success") {
-      footerMessage.style.color = "#34d399"; // Light green
-    } else {
-      footerMessage.style.color = "var(--text-secondary)";
-    }
+    if (type === "error") footer.style.color = "#f87171";
+    else if (type === "success") footer.style.color = "#34d399";
+    else footer.style.color = "";
 
-    // Reset after 3.5 seconds
     setTimeout(() => {
-      footerMessage.innerText = "Ready to bridge context";
-      footerMessage.style.color = "var(--text-muted)";
-    }, 3500);
+      footer.textContent = original;
+      footer.style.color = "";
+    }, 3000);
+  }
+
+  function escapeHTML(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
   }
 });
-
