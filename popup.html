@@ -11,7 +11,7 @@
     <!-- Header -->
     <header>
       <div class="logo-area">
-        <img src="icon.svg" alt="Capsule Hub Logo" class="header-logo">
+        <img src="icon48.png" alt="Capsule Hub Logo" class="header-logo">
         <div class="logo-text">
           <h1>Capsule Hub</h1>
           <span class="tagline">AI Context Bridge</span>
@@ -23,13 +23,23 @@
       </div>
     </header>
 
+    <!-- Tab Navigation -->
+    <nav class="tab-nav">
+      <button id="tab-capture" class="tab-btn active">
+        <span class="tab-icon">⚡</span> Capture
+      </button>
+      <button id="tab-library" class="tab-btn">
+        <span class="tab-icon">💊</span> Library <span id="library-count" class="tab-badge">0</span>
+      </button>
+    </nav>
+
     <!-- Main Content Area -->
     <main>
       <!-- Screen 1: No active session / Unsupported site -->
       <section id="unsupported-view" class="view hidden">
         <div class="welcome-card">
           <div class="welcome-icon">⚡</div>
-          <h3>Bridge Your Conversations</h3>
+          <h3>Bridge Your AI Conversations</h3>
           <p>Open one of the supported AI chats to capture your conversation context automatically:</p>
           <div class="provider-launchpad">
             <a href="https://chatgpt.com" target="_blank" class="launch-btn chatgpt-theme">
@@ -54,6 +64,12 @@
             </button>
           </div>
         </div>
+
+        <!-- Privacy Badge -->
+        <div class="privacy-badge">
+          <span class="shield-icon">🔒</span>
+          <span>100% local &amp; private — your data never leaves your browser</span>
+        </div>
       </section>
 
       <!-- Screen 2: Context Captured -->
@@ -62,16 +78,16 @@
         <div class="source-info-bar">
           <span class="info-label">Captured from:</span>
           <span id="source-badge" class="source-badge">AI Tool</span>
-          <span id="message-count-badge" class="count-badge">0 turns</span>
+          <span id="message-count-badge" class="count-badge">0 messages</span>
         </div>
 
         <!-- Scrollable Messages List -->
         <div class="section-title">
-          <span>Select turns to bridge</span>
+          <span>Select messages to bridge</span>
           <div class="title-actions">
             <button id="select-all-btn" class="text-link-btn">Select All</button>
             <span class="sep">|</span>
-            <button id="select-last-btn" class="text-link-btn">Last Turn Only</button>
+            <button id="select-last-btn" class="text-link-btn">Last Turn</button>
           </div>
         </div>
 
@@ -81,24 +97,24 @@
 
         <!-- Context Mode Selector -->
         <div class="mode-selector">
-          <div class="mode-group">
+          <label class="mode-group">
             <input type="radio" id="mode-full" name="context-mode" value="full" checked>
-            <label for="mode-full" class="mode-label">Full Context</label>
-          </div>
-          <div class="mode-group">
+            <span class="mode-label">Full</span>
+          </label>
+          <label class="mode-group">
             <input type="radio" id="mode-selective" name="context-mode" value="selective">
-            <label for="mode-selective" class="mode-label">Selective</label>
-          </div>
-          <div class="mode-group">
+            <span class="mode-label">Selective</span>
+          </label>
+          <label class="mode-group">
             <input type="radio" id="mode-summary" name="context-mode" value="summary">
-            <label for="mode-summary" class="mode-label">Summary</label>
-          </div>
+            <span class="mode-label">Smart Summary</span>
+          </label>
         </div>
 
         <!-- Token Counter -->
         <div class="token-counter">
-          <span id="token-count">0 tokens</span>
-          <span class="token-warning" id="token-warning">⚠️ High token usage</span>
+          <span id="token-count">~0 tokens</span>
+          <span class="token-warning" id="token-warning">⚠️ Large context</span>
         </div>
 
         <!-- Format Options -->
@@ -115,11 +131,11 @@
           <h3>Continue this conversation in:</h3>
           <div class="target-grid">
             <button class="target-btn chatgpt-btn" data-target="chatgpt" data-url="https://chatgpt.com">
-              <span class="target-logo">💬</span>
+              <span class="target-logo">🤖</span>
               <span class="target-name">ChatGPT</span>
             </button>
             <button class="target-btn claude-btn" data-target="claude" data-url="https://claude.ai">
-              <span class="target-logo">🎭</span>
+              <span class="target-logo">🎨</span>
               <span class="target-name">Claude</span>
             </button>
             <button class="target-btn gemini-btn" data-target="gemini" data-url="https://gemini.google.com">
@@ -133,23 +149,43 @@
           </div>
         </div>
 
-        
+        <!-- Capsule Actions -->
+        <div class="capsule-actions">
+          <button id="save-capsule-btn" class="action-btn capsule-save-btn">
+            <span class="btn-icon">💊</span> Save Capsule
+          </button>
+          <button id="export-capsule-btn" class="action-btn capsule-export-btn">
+            <span class="btn-icon">📥</span> Export .md
+          </button>
+        </div>
+
         <!-- Secondary Actions -->
         <div class="popup-actions">
           <button id="copy-clipboard-btn" class="action-btn secondary-btn">
-            <span class="btn-icon">📋</span> Copy Raw Context
+            <span class="btn-icon">📋</span> Copy to Clipboard
           </button>
           <button id="clear-session-btn" class="action-btn text-btn">
             Clear Context
           </button>
         </div>
       </section>
+
+      <!-- Screen 3: Capsule Library -->
+      <section id="library-view" class="view hidden">
+        <div class="library-header">
+          <h3>💊 Capsule Library</h3>
+          <p class="library-subtitle">Your saved contexts — stored locally in your browser</p>
+        </div>
+        <div id="library-list" class="library-scroll-container">
+          <!-- Populated programmatically -->
+        </div>
+      </section>
     </main>
 
     <!-- Footer -->
     <footer>
-      <div id="footer-message">Ready to bridge context</div>
-      <div class="version-label">v1.0.0</div>
+      <div id="footer-message">🔒 100% local • No data leaves your browser</div>
+      <div class="version-label">v1.2.0</div>
     </footer>
   </div>
   <script src="popup.js"></script>
