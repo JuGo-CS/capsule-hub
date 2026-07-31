@@ -1,5 +1,6 @@
-// Capsule Hub - Intelligent Context Extraction
-// Uses the AI itself to create intelligent context capsules
+// Capsule Hub - Intelligent Local Context Extraction
+// 🔒 PRIVACY: All processing happens locally. Zero external calls.
+// 💡 Works even when AI is out of tokens!
 
 console.log("[Capsule Hub] Content script loaded on", window.location.hostname);
 
@@ -58,7 +59,7 @@ function detectProvider() {
   return null;
 }
 
-// Extract conversation messages
+// Extract and clean messages
 function extractMessages() {
   const providerKey = detectProvider();
   if (!providerKey) return [];
@@ -80,11 +81,11 @@ function extractMessages() {
 
     // Clean the text
     const clone = element.cloneNode(true);
-    const toRemove = clone.querySelectorAll('button, svg, [aria-hidden="true"], [role="button"]');
+    const toRemove = clone.querySelectorAll('button, svg, [aria-hidden="true"], [role="button"], img[class*="avatar"]');
     toRemove.forEach(el => el.remove());
 
     let text = (clone.innerText || clone.textContent || "").trim();
-    text = text.replace(/^(Copy|Copy code|Regenerate)\s*/gim, '');
+    text = text.replace(/^(Copy|Copy code|Regenerate|Good response|Bad response)\s*/gim, '');
 
     if (text && role !== 'unknown') {
       messages.push({ role, text });
@@ -94,44 +95,328 @@ function extractMessages() {
   return messages;
 }
 
-// The intelligent prompt that asks the AI to create a capsule
-const CAPSULE_CREATION_PROMPT = `You are helping create a "Context Capsule" - a compact, intelligent summary of our conversation that can be transferred to another AI assistant.
+// Intelligent local analysis - NO external API calls!
+function analyzeConversation(messages) {
+  if (!messages || messages.length === 0) {
+    return null;
+  }
 
-Please analyze our entire conversation above and create a context capsule with the following structure:
+  const userMessages = messages.filter(m => m.role === 'user').map(m => m.text);
+  const assistantMessages = messages.filter(m => m.role === 'assistant').map(m => m.text);
 
-[CONTEXT CAPSULE]
+  // 1. Extract objective from user messages
+  const objective = extractObjective(userMessages);
 
-## OBJECTIVE
-(What was the main goal/task I was trying to accomplish? Be specific and concise - 1-2 sentences)
+  // 2. Extract key decisions
+  const decisions = extractDecisions(messages);
 
-## KEY DECISIONS
-(List the important decisions we made during this conversation - bullet points)
+  // 3. Track progress
+  const progress = trackProgress(assistantMessages);
 
-## PROGRESS
-✅ (What has been completed/accomplished - bullet points)
-⏳ (What is still pending/needs to be done - bullet points)
+  // 4. Extract technical details
+  const technicalDetails = extractTechnicalDetails(messages);
 
-## TECHNICAL DETAILS
-(Important technical details, constraints, requirements, or specifications discussed)
+  // 5. Extract all code blocks
+  const codeBlocks = extractCodeBlocks(messages);
 
-## CODE
-(If any code was written, include the MOST IMPORTANT code blocks here - keep only essential code, not every snippet)
+  // 6. Determine current state
+  const currentState = determineCurrentState(messages);
 
-## CURRENT STATE
-(Where exactly are we right now? What was the last thing discussed? What should the next AI know to continue seamlessly?)
+  return {
+    objective,
+    decisions,
+    progress,
+    technicalDetails,
+    codeBlocks,
+    currentState,
+    messageCount: messages.length,
+    userMessageCount: userMessages.length,
+    assistantMessageCount: assistantMessages.length
+  };
+}
 
-[END CAPSULE]
+// Extract objective from user messages
+function extractObjective(userMessages) {
+  if (userMessages.length === 0) return 'No objective identified';
 
-IMPORTANT GUIDELINES:
-- Be INTELLIGENT and CONCISE - this should be 400-800 tokens max
-- Capture the ESSENCE, not every detail
-- Focus on what's needed to CONTINUE the conversation in a new AI
-- Include all important code, but only the essential parts
-- Write this as if you're briefing another AI assistant who will take over
-- Do NOT include this prompt in your response, only the capsule itself
-- Do NOT add any commentary before or after the capsule
+  // Analyze first 5 user messages for the main goal
+  const goalPatterns = [
+    /(?:i (?:want|need|'d like) (?:to|you to))\s+(.+?)(?:\.|$)/i,
+    /(?:help me|please)\s+(.+?)(?:\.|$)/i,
+    /(?:build|create|make|develop|implement|design)\s+(?:a|an|the)?\s*(.+?)(?:\.|$)/i,
+    /(?:can you|could you)\s+(.+?)(?:\?|$)/i,
+    /(?:how (?:do|can|to))\s+(.+?)(?:\?|$)/i
+  ];
 
-Please create the context capsule now:`;
+  // Check first 5 user messages
+  for (let i = 0; i < Math.min(5, userMessages.length); i++) {
+    const msg = userMessages[i];
+    
+    for (const pattern of goalPatterns) {
+      const match = msg.match(pattern);
+      if (match && match[1] && match[1].length > 10 && match[1].length < 200) {
+        let goal = match[1].trim();
+        goal = goal.replace(/[?.!]+$/, '');
+        return goal.charAt(0).toUpperCase() + goal.slice(1);
+      }
+    }
+  }
+
+  // Fallback: Use the most substantial user message
+  const substantial = userMessages
+    .filter(m => m.length > 20)
+    .sort((a, b) => b.length - a.length);
+
+  if (substantial.length > 0) {
+    const msg = substantial[0];
+    const sentences = msg.split(/[.!?]+/).filter(s => s.trim().length > 15);
+    if (sentences.length > 0) {
+      return sentences[0].trim().charAt(0).toUpperCase() + sentences[0].trim().slice(1);
+    }
+  }
+
+  return userMessages[0].substring(0, 100);
+}
+
+// Extract key decisions
+function extractDecisions(messages) {
+  const decisions = [];
+  const decisionPatterns = [
+    /(?:let's (?:go with|use|choose|implement|try))\s+(.+?)(?:\.|$)/i,
+    /(?:i(?:'ll| will) use)\s+(.+?)(?:\.|$)/i,
+    /(?:we(?:'ll| will| should) use)\s+(.+?)(?:\.|$)/i,
+    /(?:decided to|decision:|chosen:?)\s*(.+?)(?:\.|$)/i,
+    /(?:the best (?:approach|way|method) is)\s+(.+?)(?:\.|$)/i,
+    /(?:good idea[.!]\s*(?:let's|we'll|we will))\s+(.+?)(?:\.|$)/i
+  ];
+
+  messages.forEach(msg => {
+    const sentences = msg.text.split(/[.!?]+/).filter(s => s.trim().length > 15);
+    sentences.forEach(sentence => {
+      decisionPatterns.forEach(pattern => {
+        const match = sentence.match(pattern);
+        if (match && match[1] && match[1].length > 10) {
+          decisions.push(match[1].trim());
+        }
+      });
+    });
+  });
+
+  return [...new Set(decisions)].slice(0, 5);
+}
+
+// Track progress
+function trackProgress(assistantMessages) {
+  const completed = [];
+  const pending = [];
+
+  const completedPatterns = [
+    /(?:i(?:'ve| have) (?:created|built|implemented|added|fixed|completed|finished|written|set up))\s+(.+?)(?:\.|$)/i,
+    /(?:here(?:'s| is) (?:the|your|a))\s+(.+?)(?:\.|$)/i,
+    /(?:the (?:code|function|component|file|feature) (?:is|has been))\s+(.+?)(?:\.|$)/i,
+    /(?:done[.!]|completed[.!]|finished[.!]|ready[.!])/i
+  ];
+
+  const pendingPatterns = [
+    /(?:you (?:can|could|should|might want to) (?:also|additionally|next))\s+(.+?)(?:\.|$)/i,
+    /(?:still need to|todo|remaining|yet to|left to do)\s+(.+?)(?:\.|$)/i,
+    /(?:next (?:step|we should|you should))\s+(.+?)(?:\.|$)/i,
+    /(?:would you like me to|should i)\s+(.+?)(?:\?|$)/i
+  ];
+
+  assistantMessages.forEach(msg => {
+    const sentences = msg.text.split(/[.!?]+/).filter(s => s.trim().length > 15);
+    sentences.forEach(sentence => {
+      completedPatterns.forEach(pattern => {
+        const match = sentence.match(pattern);
+        if (match && match[1]) {
+          completed.push(match[1].trim());
+        } else if (pattern.test(sentence) && !match) {
+          completed.push(sentence.trim());
+        }
+      });
+
+      pendingPatterns.forEach(pattern => {
+        const match = sentence.match(pattern);
+        if (match && match[1]) {
+          pending.push(match[1].trim());
+        }
+      });
+    });
+  });
+
+  return {
+    completed: [...new Set(completed)].slice(0, 5),
+    pending: [...new Set(pending)].slice(0, 3)
+  };
+}
+
+// Extract technical details
+function extractTechnicalDetails(messages) {
+  const details = [];
+  const techPatterns = [
+    /(?:using|with|in)\s+([\w\s]+?)(?:\s+(?:for|to|and)|\.)/i,
+    /(?:framework|library|language|tool|platform):\s*([\w\s]+)/i,
+    /(?:version|requirement|constraint|limitation):\s*([\w\s]+)/i
+  ];
+
+  const techKeywords = [
+    'react', 'vue', 'angular', 'javascript', 'typescript', 'python', 'java',
+    'node', 'express', 'django', 'flask', 'database', 'api', 'rest', 'graphql',
+    'jwt', 'authentication', 'authorization', 'css', 'html', 'sql', 'mongodb',
+    'postgresql', 'docker', 'kubernetes', 'aws', 'git', 'webpack', 'vite'
+  ];
+
+  messages.forEach(msg => {
+    const text = msg.text.toLowerCase();
+    techKeywords.forEach(keyword => {
+      if (text.includes(keyword) && !details.includes(keyword)) {
+        details.push(keyword);
+      }
+    });
+  });
+
+  return details.slice(0, 8);
+}
+
+// Extract code blocks
+function extractCodeBlocks(messages) {
+  const codeBlocks = [];
+  const codeRegex = /```[\s\S]*?```/g;
+
+  messages.forEach(msg => {
+    let match;
+    while ((match = codeRegex.exec(msg.text)) !== null) {
+      codeBlocks.push({
+        code: match[0],
+        role: msg.role
+      });
+    }
+  });
+
+  return codeBlocks;
+}
+
+// Determine current state
+function determineCurrentState(messages) {
+  if (messages.length === 0) return 'Empty conversation';
+
+  const lastMsg = messages[messages.length - 1];
+  
+  if (lastMsg.role === 'assistant') {
+    const completionIndicators = [
+      /(?:done|completed|finished|that's it|all set|there you go)/i,
+      /(?:let me know if you (?:need|have) (?:anything|any questions))/i,
+      /(?:is there anything else)/i,
+      /(?:feel free to ask)/i
+    ];
+
+    for (const pattern of completionIndicators) {
+      if (pattern.test(lastMsg.text)) {
+        return 'Task completed, awaiting user feedback or next request';
+      }
+    }
+
+    return 'Implementation provided, awaiting user review';
+  }
+
+  if (lastMsg.role === 'user') {
+    if (/\?/.test(lastMsg.text)) {
+      return 'Question asked, awaiting AI response';
+    }
+    if (/^(thanks|thank you|perfect|great|awesome)/i.test(lastMsg.text)) {
+      return 'User satisfied, conversation may be complete';
+    }
+    return 'User input provided, awaiting AI response';
+  }
+
+  return 'Conversation in progress';
+}
+
+// Create intelligent capsule - ALL LOCAL, NO API CALLS!
+function createIntelligentCapsule() {
+  const providerKey = detectProvider();
+  if (!providerKey) {
+    throw new Error("Not on a supported AI platform");
+  }
+
+  const provider = PROVIDERS[providerKey];
+  const messages = extractMessages();
+  
+  if (messages.length === 0) {
+    throw new Error("No conversation found. Start chatting first!");
+  }
+
+  // Analyze the conversation locally
+  const analysis = analyzeConversation(messages);
+  
+  if (!analysis) {
+    throw new Error("Failed to analyze conversation");
+  }
+
+  // Generate capsule name from objective
+  let capsuleName = analysis.objective;
+  if (capsuleName.length > 60) {
+    capsuleName = capsuleName.substring(0, 57) + "...";
+  }
+
+  // Create the capsule text
+  let capsule = '';
+
+  capsule += `[CONTEXT CAPSULE]\n`;
+  capsule += `[${analysis.messageCount} messages compressed]\n\n`;
+
+  // Objective
+  capsule += `## OBJECTIVE\n${analysis.objective}\n\n`;
+
+  // Key Decisions
+  if (analysis.decisions.length > 0) {
+    capsule += `## KEY DECISIONS\n`;
+    analysis.decisions.forEach(decision => {
+      capsule += `- ${decision}\n`;
+    });
+    capsule += '\n';
+  }
+
+  // Progress
+  if (analysis.progress.completed.length > 0 || analysis.progress.pending.length > 0) {
+    capsule += `## PROGRESS\n`;
+    analysis.progress.completed.forEach(item => {
+      capsule += `✅ ${item}\n`;
+    });
+    analysis.progress.pending.forEach(item => {
+      capsule += `⏳ ${item}\n`;
+    });
+    capsule += '\n';
+  }
+
+  // Technical Details
+  if (analysis.technicalDetails.length > 0) {
+    capsule += `## TECHNICAL DETAILS\n`;
+    capsule += `Technologies: ${analysis.technicalDetails.join(', ')}\n\n`;
+  }
+
+  // Code Blocks
+  if (analysis.codeBlocks.length > 0) {
+    capsule += `## CODE (${analysis.codeBlocks.length} blocks)\n`;
+    analysis.codeBlocks.forEach((block, i) => {
+      capsule += `${block.code}\n\n`;
+    });
+  }
+
+  // Current State
+  capsule += `## CURRENT STATE\n${analysis.currentState}\n\n`;
+
+  capsule += `[END CAPSULE - Continue from current state]`;
+
+  return {
+    name: capsuleName,
+    text: capsule,
+    messageCount: analysis.messageCount,
+    provider: provider.name,
+    timestamp: Date.now()
+  };
+}
 
 // Inject text into input field
 function injectText(element, text) {
@@ -163,138 +448,6 @@ function injectText(element, text) {
   }
 }
 
-// Wait for AI response and capture it
-async function waitForCapsuleResponse(timeout = 60000) {
-  const providerKey = detectProvider();
-  if (!providerKey) throw new Error("Provider not detected");
-
-  const provider = PROVIDERS[providerKey];
-  const startTime = Date.now();
-  let lastMessageCount = document.querySelectorAll(provider.selectors.assistantMessage).length;
-
-  // Wait for new message to appear
-  while (Date.now() - startTime < timeout) {
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const currentMessages = document.querySelectorAll(provider.selectors.assistantMessage);
-    
-    if (currentMessages.length > lastMessageCount) {
-      // New message appeared, wait for it to finish
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Get the last message
-      const lastMessage = currentMessages[currentMessages.length - 1];
-      const clone = lastMessage.cloneNode(true);
-      const toRemove = clone.querySelectorAll('button, svg, [aria-hidden="true"]');
-      toRemove.forEach(el => el.remove());
-      
-      const text = (clone.innerText || clone.textContent || "").trim();
-      
-      // Check if it contains the capsule marker
-      if (text.includes('[CONTEXT CAPSULE]') || text.includes('[END CAPSULE]')) {
-        // Extract just the capsule part
-        const capsuleMatch = text.match(/\[CONTEXT CAPSULE\][\s\S]*?\[END CAPSULE\]/);
-        if (capsuleMatch) {
-          return capsuleMatch[0];
-        }
-      }
-      
-      // If no markers, return the whole response (AI might have formatted differently)
-      if (text.length > 200) {
-        return text;
-      }
-    }
-  }
-  
-  throw new Error("Timeout waiting for capsule response");
-}
-
-// Create capsule using AI intelligence
-async function createIntelligentCapsule() {
-  const providerKey = detectProvider();
-  if (!providerKey) {
-    throw new Error("Not on a supported AI platform");
-  }
-
-  const provider = PROVIDERS[providerKey];
-  
-  // Extract current messages
-  const messages = extractMessages();
-  if (messages.length === 0) {
-    throw new Error("No conversation found. Start chatting first!");
-  }
-
-  // Find input field
-  const inputElement = document.querySelector(provider.selectors.input);
-  if (!inputElement) {
-    throw new Error("Input field not found");
-  }
-
-  // Inject the capsule creation prompt
-  injectText(inputElement, CAPSULE_CREATION_PROMPT);
-
-  // Wait a bit for the text to be registered
-  await new Promise(resolve => setTimeout(resolve, 500));
-
-  // Click send button or press Enter
-  const sendButton = document.querySelector(provider.selectors.sendButton);
-  if (sendButton) {
-    sendButton.click();
-  } else {
-    // Fallback: simulate Enter key
-    const enterEvent = new KeyboardEvent('keydown', {
-      key: 'Enter',
-      code: 'Enter',
-      keyCode: 13,
-      which: 13,
-      bubbles: true,
-      cancelable: true
-    });
-    inputElement.dispatchEvent(enterEvent);
-  }
-
-  // Show indicator
-  showIndicator("🧠 AI is creating your capsule...");
-
-  // Wait for response
-  try {
-    const capsule = await waitForCapsuleResponse(60000);
-    showIndicator(null);
-    return {
-      text: capsule,
-      messageCount: messages.length,
-      provider: provider.name,
-      timestamp: Date.now()
-    };
-  } catch (error) {
-    showIndicator(null);
-    throw error;
-  }
-}
-
-// Show/hide indicator
-function showIndicator(message) {
-  let indicator = document.getElementById('capsule-hub-indicator');
-
-  if (!message) {
-    if (indicator) {
-      indicator.classList.remove('visible');
-      setTimeout(() => indicator?.remove(), 300);
-    }
-    return;
-  }
-
-  if (!indicator) {
-    indicator = document.createElement('div');
-    indicator.id = 'capsule-hub-indicator';
-    indicator.innerHTML = '<div class="spinner"></div><span></span>';
-    document.body.appendChild(indicator);
-  }
-
-  indicator.querySelector('span').textContent = message;
-  requestAnimationFrame(() => indicator.classList.add('visible'));
-}
-
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "extractMessages") {
@@ -304,14 +457,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === "createCapsule") {
-    createIntelligentCapsule()
-      .then(capsule => {
-        sendResponse({ success: true, capsule });
-      })
-      .catch(error => {
-        sendResponse({ success: false, error: error.message });
-      });
-    return true; // Keep channel open for async response
+    try {
+      const capsule = createIntelligentCapsule();
+      sendResponse({ success: true, capsule });
+    } catch (error) {
+      sendResponse({ success: false, error: error.message });
+    }
+    return false;
   }
 
   if (request.action === "ping") {
@@ -335,8 +487,6 @@ chrome.storage.local.get('pendingContext', (data) => {
         let attempts = 0;
         const maxAttempts = 40;
 
-        showIndicator("Injecting context...");
-
         const pollInterval = setInterval(() => {
           attempts++;
           const inputElement = document.querySelector(provider.selectors.input);
@@ -345,17 +495,13 @@ chrome.storage.local.get('pendingContext', (data) => {
             clearInterval(pollInterval);
             setTimeout(() => {
               injectText(inputElement, context.text);
-              showIndicator(null);
               chrome.storage.local.remove('pendingContext');
-              
-              // Show success toast
               showToast("✅ Context injected! Press Enter to continue.", "success");
             }, 800);
           }
 
           if (attempts >= maxAttempts) {
             clearInterval(pollInterval);
-            showIndicator(null);
             navigator.clipboard.writeText(context.text);
             showToast("⚠️ Auto-inject failed. Context copied to clipboard.", "warning");
           }
