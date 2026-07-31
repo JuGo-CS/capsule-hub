@@ -202,6 +202,6 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 ## 🙏 Credits
 
-Built with ❤️ by [Pruthvikrishnan G](https://github.com/pruthvikrishnang)
+Built with ❤️ by [Pruthvi Krishna N G](https://github.com/pruthvikrishnang)
 
 *If this extension helps your workflow, please ⭐ star the repo and share it!*
