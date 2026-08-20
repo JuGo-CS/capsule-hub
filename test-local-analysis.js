@@ -4,7 +4,7 @@
 const fs = require('fs');
 
 // Load content.js
-const contentCode = fs.readFileSync('content.js', 'utf8');
+const contentCode = fs.readFileSync('src/content/content.js', 'utf8');
 
 // Mock browser APIs
 global.chrome = {
