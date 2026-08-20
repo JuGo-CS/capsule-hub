@@ -74,7 +74,7 @@ console.log(`  Has [CONTEXT CAPSULE]: ${structure.includes('[CONTEXT CAPSULE]')}
 console.log(`  Has ## OBJECTIVE: ${structure.includes('## OBJECTIVE')}`);
 console.log(`  Has ## PROGRESS: ${structure.includes('## PROGRESS')}`);
 console.log(`  Has ## CODE: ${structure.includes('## CODE')}`);
-console.log(`  Has [END CAPSULE]: ${structure.includes('[END CAPSULE]')}`);
+console.log(`  Has [END CAPSULE]: ${structure.includes('[END CAPSULE')}`);
 console.log('');
 
 // Test 4: Show full capsule
